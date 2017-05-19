@@ -169,6 +169,22 @@ class PyNoneObject(PyObject):
     value = None
 
 
+class PyListObject(PyObject):
+
+    typename = 'list'
+
+    @property
+    def value(self):
+        list_type = lldb.target.FindFirstType('PyListObject')
+
+        value = self.lldb_value.deref.Cast(list_type)
+        size = value.GetValueForExpressionPath('.ob_base.ob_size').signed
+        items = value.GetChildMemberWithName('ob_item')
+
+        return [PyObject.from_value(items.GetChildAtIndex(i, 0, 1))
+                for i in range(size)]
+
+
 def pretty_printer(value, internal_dict):
     """Provide a type summary for a PyObject instance.
 

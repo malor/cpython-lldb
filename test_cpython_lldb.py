@@ -66,8 +66,14 @@ class TestPrettyPrint(BaseTestCase):
         self.assert_lldb_repr(u'𐅐𐅀𐅰',
                               "u'\\\\U00010150\\\\U00010140\\\\U00010170'")
 
+    def test_list(self):
+        self.assert_lldb_repr([], '\[\]')
+        self.assert_lldb_repr([1, 2, 3], '\[1, 2, 3\]')
+        self.assert_lldb_repr([1, 3.14159, u'hello', False, None],
+                              '\[1, 3.14159, u\'hello\', False, None\]')
+
     def test_unsupported(self):
-        self.assert_lldb_repr([], '\'0x[0-9a-f]+\'')  # FIXME
+        self.assert_lldb_repr({}, '\'0x[0-9a-f]+\'')  # FIXME
 
 
 if __name__ == "__main__":
