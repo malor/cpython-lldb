@@ -13,7 +13,8 @@ class BaseTestCase(unittest.TestCase):
             'lldb',
             sys.executable,
             '-o', 'breakpoint set -r builtin_id',
-            '-o', 'run -c "id(%s)"' % repr(value),
+            # lldb wants { and } to be properly escaped
+            '-o', 'run -c "id(%s)"' % repr(value).replace('}', '\}'),
             '-o', 'script import sys',
             '-o', 'script sys.path.insert(0, "%s")' % os.path.dirname(os.path.abspath(__file__)),
             '-o', 'command script import cpython_lldb',
@@ -71,6 +72,14 @@ class TestPrettyPrint(BaseTestCase):
         self.assert_lldb_repr([1, 2, 3], '\[1, 2, 3\]')
         self.assert_lldb_repr([1, 3.14159, u'hello', False, None],
                               '\[1, 3.14159, u\'hello\', False, None\]')
+
+    def test_set(self):
+        self.assert_lldb_repr(set(), 'set\(\[\]\)')
+        self.assert_lldb_repr(set([1, 2, 3]), 'set\(\[1, 2, 3\]\)')
+        self.assert_lldb_repr(set([1, 3.14159, u'hello', False, None]),
+                              'set\(\[False, 1, 3.14159, u\'hello\', None]\)')
+        self.assert_lldb_repr(set(range(16)),
+                              'set\(\[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15\]\)')
 
     def test_unsupported(self):
         self.assert_lldb_repr({}, '\'0x[0-9a-f]+\'')  # FIXME

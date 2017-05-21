@@ -9,6 +9,14 @@ class PyObject(object):
     def __repr__(self):
         return repr(self.value)
 
+    def __hash__(self):
+        return hash(self.value)
+
+    def __eq__(self, other):
+        assert isinstance(other, PyObject)
+
+        return self.value == other.value
+
     @classmethod
     def from_value(cls, v):
         subclasses = {c.typename: c for c in cls.__subclasses__()}
@@ -183,6 +191,34 @@ class PyListObject(PyObject):
 
         return [PyObject.from_value(items.GetChildAtIndex(i, 0, 1))
                 for i in range(size)]
+
+
+class PySetObject(PyObject):
+
+    typename = 'set'
+
+    @property
+    def value(self):
+        set_type = lldb.target.FindFirstType('PySetObject')
+
+        value = self.lldb_value.deref.Cast(set_type)
+        size = value.GetChildMemberWithName('mask').unsigned + 1
+        table = value.GetChildMemberWithName('table')
+        array = table.deref.Cast(
+            table.type.GetPointeeType().GetArrayType(size)
+        )
+
+        rv = set()
+        for i in range(size):
+            entry = array.GetChildAtIndex(i)
+            key = entry.GetChildMemberWithName('key')
+            hash_ = entry.GetChildMemberWithName('hash').signed
+
+            # filter out 'dummy' and 'unused' slots
+            if hash_ != -1 and (hash_ != 0 or key.unsigned != 0):
+                rv.add(PyObject.from_value(key))
+
+        return rv
 
 
 def pretty_printer(value, internal_dict):
