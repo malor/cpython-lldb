@@ -221,6 +221,62 @@ class PySetObject(PyObject):
         return rv
 
 
+class PyDictObject(PyObject):
+
+    typename = 'dict'
+
+    @property
+    def value(self):
+        dict_type = lldb.target.FindFirstType('PyDictObject')
+
+        value = self.lldb_value.deref.Cast(dict_type)
+        keys = value.GetChildMemberWithName('ma_keys')
+        values = value.GetChildMemberWithName('ma_values')
+
+        rv = {}
+
+        if values.unsigned == 0:
+            # table is "combined": keys and values are stored in ma_keys
+            dictentry_type = lldb.target.FindFirstType('PyDictKeyEntry')
+            table_size = keys.GetChildMemberWithName('dk_size').unsigned
+            num_entries = keys.GetChildMemberWithName('dk_nentries').unsigned
+
+            # hash table effectively stores indexes of entries in the key/value
+            # pairs array; the size of an index varies, so that all possible
+            # array positions can be addressed
+            if table_size < 0xff:
+                index_size = 1
+            elif table_size < 0xffff:
+                index_size = 2
+            elif table_size < 0xfffffff:
+                index_size = 4
+            else:
+                index_size = 8
+            shift = table_size * index_size
+
+            # entries are stored in an array right after the indexes table
+            entries = keys.GetChildMemberWithName("dk_indices") \
+                          .GetChildMemberWithName("as_1") \
+                          .GetChildAtIndex(shift, 0, 1) \
+                          .AddressOf() \
+                          .Cast(dictentry_type.GetPointerType()) \
+                          .deref \
+                          .Cast(dictentry_type.GetArrayType(num_entries))
+
+            for i in range(num_entries):
+                entry = entries.GetChildAtIndex(i)
+                k = entry.GetChildMemberWithName('me_key')
+                v = entry.GetChildMemberWithName('me_value')
+                if k.unsigned != 0 and v.unsigned != 0:
+                    rv[PyObject.from_value(k)] = PyObject.from_value(v)
+        else:
+            # keys and values are stored separately
+            # FIXME: implement this
+            pass
+
+        return rv
+
+
 def pretty_printer(value, internal_dict):
     """Provide a type summary for a PyObject instance.
 
