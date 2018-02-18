@@ -77,7 +77,7 @@ class TestPrettyPrint(BaseTestCase):
         self.assert_lldb_repr(set(), 'set\(\[\]\)')
         self.assert_lldb_repr(set([1, 2, 3]), 'set\(\[1, 2, 3\]\)')
         self.assert_lldb_repr(set([1, 3.14159, u'hello', False, None]),
-                              'set\(\[False, 1, 3.14159, u\'hello\', None]\)')
+                              'set\(\[False, 1, None, 3.14159, u\'hello\']\)')
         self.assert_lldb_repr(set(range(16)),
                               'set\(\[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15\]\)')
 
