@@ -16,7 +16,7 @@ Features
 `cpython_lldb` currently targets (== is tested on) CPython 3.6+ and supports
  the following features:
 
-* pretty-priting of built-in types (int, bool, float, bytes, str, none, list, set, dict)
+* pretty-priting of built-in types (int, bool, float, bytes, str, none, tuple, list, set, dict)
 
 TODO:
 

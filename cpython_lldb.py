@@ -177,20 +177,38 @@ class PyNoneObject(PyObject):
     value = None
 
 
-class PyListObject(PyObject):
-
-    typename = 'list'
+class _PySequence(object):
 
     @property
     def value(self):
-        list_type = lldb.target.FindFirstType('PyListObject')
-
-        value = self.lldb_value.deref.Cast(list_type)
+        value = self.lldb_value.deref.Cast(self.lldb_type)
         size = value.GetValueForExpressionPath('.ob_base.ob_size').signed
         items = value.GetChildMemberWithName('ob_item')
 
-        return [PyObject.from_value(items.GetChildAtIndex(i, 0, 1))
-                for i in range(size)]
+        return self.python_type(
+            PyObject.from_value(items.GetChildAtIndex(i, 0, 1))
+            for i in range(size)
+        )
+
+
+class PyListObject(_PySequence, PyObject):
+
+    python_type = list
+    typename = 'list'
+
+    @property
+    def lldb_type(self):
+        return lldb.target.FindFirstType('PyListObject')
+
+
+class PyTupleObject(_PySequence, PyObject):
+
+    python_type = tuple
+    typename = 'tuple'
+
+    @property
+    def lldb_type(self):
+        return lldb.target.FindFirstType('PyTupleObject')
 
 
 class PySetObject(PyObject):

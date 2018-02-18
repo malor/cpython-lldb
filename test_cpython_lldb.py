@@ -73,6 +73,12 @@ class TestPrettyPrint(BaseTestCase):
         self.assert_lldb_repr([1, 3.14159, u'hello', False, None],
                               '\[1, 3.14159, u\'hello\', False, None\]')
 
+    def test_tuple(self):
+        self.assert_lldb_repr((), '\(\)')
+        self.assert_lldb_repr((1, 2, 3), '\(1, 2, 3\)')
+        self.assert_lldb_repr((1, 3.14159, u'hello', False, None),
+                              '\(1, 3.14159, u\'hello\', False, None\)')
+
     def test_set(self):
         self.assert_lldb_repr(set(), 'set\(\[\]\)')
         self.assert_lldb_repr(set([1, 2, 3]), 'set\(\[1, 2, 3\]\)')
