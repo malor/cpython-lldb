@@ -1,0 +1,16 @@
+dist: trusty
+sudo: required
+language: python
+
+services:
+  - docker
+
+before_install:
+  - sudo apt-get update && sudo apt-get install -y make
+
+script:
+  - make test-py36
+  - make test-py37
+
+notifications:
+  email: false
