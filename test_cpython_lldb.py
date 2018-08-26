@@ -13,8 +13,7 @@ class BaseTestCase(unittest.TestCase):
             'lldb',
             sys.executable,
             '-o', 'breakpoint set -r builtin_id',
-            # lldb wants { and } to be properly escaped
-            '-o', 'run -c "id(%s)"' % (code_value or repr(value).replace('}', '\}')),
+            '-o', 'run -c "id(%s)"' % (code_value or repr(value)),
             '-o', 'script import sys',
             '-o', 'script sys.path.insert(0, "%s")' % os.path.dirname(os.path.abspath(__file__)),
             '-o', 'command script import cpython_lldb',
@@ -56,8 +55,9 @@ class TestPrettyPrint(BaseTestCase):
     def test_bytes(self):
         self.assert_lldb_repr(b'', "b?''")
         self.assert_lldb_repr(b'hello', "b?'hello'")
-        self.assert_lldb_repr(b'\x42\x42', "b?'\x42\x42'")
-        self.assert_lldb_repr(b'\x42\x00\x42', "b?'\x42x00\x42'")
+        self.assert_lldb_repr(b'\x42\x42', "b?'BB'")
+        self.assert_lldb_repr(b'\x42\x00\x42', r"b?'B\\x00B'")
+        self.assert_lldb_repr(b'\x00\x00\x00\x00', r"b?'\\x00\\x00\\x00\\x00'")
 
     def test_str(self):
         self.assert_lldb_repr('', "u''")
@@ -83,14 +83,14 @@ class TestPrettyPrint(BaseTestCase):
         self.assert_lldb_repr(set(), 'set\(\[\]\)')
         self.assert_lldb_repr(set([1, 2, 3]), 'set\(\[1, 2, 3\]\)')
         self.assert_lldb_repr(set([1, 3.14159, u'hello', False, None]),
-                              'set\(\[False, 1, None, 3.14159, u\'hello\']\)')
+                              'set\(\[False, 1, 3.14159, None, u\'hello\'\]\)')
         self.assert_lldb_repr(set(range(16)),
                               'set\(\[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15\]\)')
 
     def test_dict(self):
         self.assert_lldb_repr({}, '{}')
         self.assert_lldb_repr({1: 2, 3: 4}, '{1: 2, 3: 4}')
-        self.assert_lldb_repr({1: 2, 'a': 'b'}, "{u'a': u'b', 1: 2}")
+        self.assert_lldb_repr({1: 2, 'a': 'b'}, "{1: 2, u'a': u'b'}")
         self.assert_lldb_repr({i: i for i in range(16)},
                               ('{0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8,'
                                ' 9: 9, 10: 10, 11: 11, 12: 12, 13: 13, 14: 14, 15: 15}'))

@@ -72,7 +72,7 @@ class PyLongObject(PyObject):
 
         digits = value.GetChildMemberWithName('ob_digit')
         abs_value = sum(
-            digits.GetChildAtIndex(i, 0, 1).unsigned  * 2 ** (shift * i)
+            digits.GetChildAtIndex(i, 0, True).unsigned  * 2 ** (shift * i)
             for i in range(0, abs(size))
         )
         return abs_value if size > 0 else -abs_value
@@ -113,13 +113,10 @@ class PyBytesObject(PyObject):
         bytes_type = lldb.target.FindFirstType('PyBytesObject')
 
         value = self.lldb_value.deref.Cast(bytes_type)
-        size = value.GetValueForExpressionPath('.ob_base.ob_size').signed
-        addr = value.GetChildMemberWithName('ob_sval') \
-                    .GetLoadAddress()
+        size = value.GetValueForExpressionPath('.ob_base.ob_size').unsigned
+        addr = value.GetValueForExpressionPath('.ob_sval').GetLoadAddress()
 
-        bytes_value = lldb.process.ReadCStringFromMemory(addr, size + 1,
-                                                         lldb.SBError())
-        return bytes(bytes_value) if bytes_value else b''
+        return bytes(lldb.process.ReadMemory(addr, size, lldb.SBError())) if size else b''
 
 
 class PyUnicodeObject(PyObject):
@@ -186,7 +183,7 @@ class _PySequence(object):
         items = value.GetChildMemberWithName('ob_item')
 
         return self.python_type(
-            PyObject.from_value(items.GetChildAtIndex(i, 0, 1))
+            PyObject.from_value(items.GetChildAtIndex(i, 0, True))
             for i in range(size)
         )
 
@@ -246,6 +243,7 @@ class PyDictObject(PyObject):
     @property
     def value(self):
         dict_type = lldb.target.FindFirstType('PyDictObject')
+        byte_type = lldb.target.FindFirstType('char')
 
         value = self.lldb_value.deref.Cast(dict_type)
         keys = value.GetChildMemberWithName('ma_keys')
@@ -274,8 +272,8 @@ class PyDictObject(PyObject):
 
             # entries are stored in an array right after the indexes table
             entries = keys.GetChildMemberWithName("dk_indices") \
-                          .GetChildMemberWithName("as_1") \
-                          .GetChildAtIndex(shift, 0, 1) \
+                          .Cast(byte_type.GetArrayType(shift)) \
+                          .GetChildAtIndex(shift, 0, True) \
                           .AddressOf() \
                           .Cast(dictentry_type.GetPointerType()) \
                           .deref \
