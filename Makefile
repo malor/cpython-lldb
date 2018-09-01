@@ -3,6 +3,9 @@ PY_VERSION := latest
 build-image:
 	docker build -t cpython-lldb:$(PY_VERSION) --build-arg PY_VERSION=$(PY_VERSION) .
 
+build-image-py35: PY_VERSION=3.5
+build-image-py35: build-image
+
 build-image-py36: PY_VERSION=3.6
 build-image-py36: build-image
 
@@ -16,6 +19,9 @@ test: build-image
 		-e PYTHONHASHSEED=1 \
 		cpython-lldb:$(PY_VERSION) \
 		bash -c "cd /root/.lldb/cpython-lldb && python test_cpython_lldb.py -v"
+
+test-py35: PY_VERSION=3.5
+test-py35: test
 
 test-py36: PY_VERSION=3.6
 test-py36: test

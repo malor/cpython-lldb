@@ -13,7 +13,7 @@ one might still prefer to use LLDB as a debugger, e.g. on Mac OS.
 Features
 ========
 
-`cpython_lldb` currently targets (== is tested on) CPython 3.6+ and supports
+`cpython_lldb` currently targets (== is tested on) CPython 3.5+ and supports
  the following features:
 
 * pretty-priting of built-in types (int, bool, float, bytes, str, none, tuple, list, set, dict)

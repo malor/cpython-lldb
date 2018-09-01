@@ -270,14 +270,21 @@ class PyDictObject(PyObject):
                 index_size = 8
             shift = table_size * index_size
 
-            # entries are stored in an array right after the indexes table
-            entries = keys.GetChildMemberWithName("dk_indices") \
-                          .Cast(byte_type.GetArrayType(shift)) \
-                          .GetChildAtIndex(shift, 0, True) \
-                          .AddressOf() \
-                          .Cast(dictentry_type.GetPointerType()) \
-                          .deref \
-                          .Cast(dictentry_type.GetArrayType(num_entries))
+            indices = keys.GetChildMemberWithName("dk_indices")
+            if indices.IsValid():
+                # CPython version >= 3.6
+                # entries are stored in an array right after the indexes table
+                entries = indices.Cast(byte_type.GetArrayType(shift)) \
+                                 .GetChildAtIndex(shift, 0, True) \
+                                 .AddressOf() \
+                                 .Cast(dictentry_type.GetPointerType()) \
+                                 .deref \
+                                 .Cast(dictentry_type.GetArrayType(num_entries))
+            else:
+                # CPython version < 3.6
+                num_entries = table_size
+                entries = keys.GetChildMemberWithName("dk_entries") \
+                              .Cast(dictentry_type.GetArrayType(num_entries))
 
             for i in range(num_entries):
                 entry = entries.GetChildAtIndex(i)
