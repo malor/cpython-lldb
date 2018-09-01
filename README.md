@@ -1,6 +1,8 @@
 What is cpython-lldb?
 =====================
 
+[![Build Status](https://travis-ci.org/malor/cpython-lldb.svg?branch=master)](https://travis-ci.org/malor/cpython-lldb)
+
 `cpython_lldb` is an extension for LLDB for debugging of Python applications
 running on CPython, that allows to get meaningful application-level information
 (e.g. variable values or stack traces).
