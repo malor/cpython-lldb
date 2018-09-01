@@ -2,6 +2,15 @@ dist: trusty
 sudo: required
 language: python
 
+matrix:
+  include:
+    - name: "Python 3.5"
+      env: PY_VERSION=py35
+    - name: "Python 3.6"
+      env: PY_VERSION=py36
+    - name: "Python 3.7"
+      env: PY_VERSION=py37
+
 services:
   - docker
 
@@ -9,9 +18,7 @@ before_install:
   - sudo apt-get update && sudo apt-get install -y make
 
 script:
-  - make test-py35
-  - make test-py36
-  - make test-py37
+  - make test-$PY_VERSION
 
 notifications:
   email: false
