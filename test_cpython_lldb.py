@@ -26,8 +26,22 @@ class BaseTestCase(unittest.TestCase):
             for line in subprocess.check_output(args).decode('utf-8').splitlines()
             if 'frame #0' in line
         ][-1]
-        match = re.search('v=' + expected, actual)
-        self.assertIsNotNone(match, "Expected output '%s' is not found in '%s'" % (expected, actual))
+        match = re.search('v=(.*)\) at', actual)
+        self.assertIsNotNone(match)
+
+        if isinstance(value, (set, dict)):
+            # sets and dicts can have different order of keys depending on
+            # CPython version, so we evaluate the representation and compare
+            # it to the expected value
+            self.assertEqual(value, eval(match.group(1), {}, {}))
+        else:
+            # for other data types we can do an exact string match using
+            # a regular expression (e.g. to account for optional 'u' and 'b'
+            # in unicode / bytes literals, etc)
+            self.assertTrue(
+                re.match(expected, match.group(1)),
+                "Expected: %s\nActual: %s" % (expected, match.group(1))
+            )
 
 
 class TestPrettyPrint(BaseTestCase):
