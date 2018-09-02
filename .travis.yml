@@ -4,6 +4,8 @@ language: python
 
 matrix:
   include:
+    - name: "Python 3.4"
+      env: PY_VERSION=py34
     - name: "Python 3.5"
       env: PY_VERSION=py35
     - name: "Python 3.6"
