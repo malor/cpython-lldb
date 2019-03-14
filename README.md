@@ -22,7 +22,7 @@ Features
 
 TODO:
 
-* stack traces
+* stack traces w/ mixed stacks (e.g. involving calls to clibs)
 * local variables
 * code listing
 
