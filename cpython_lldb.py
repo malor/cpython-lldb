@@ -1,11 +1,22 @@
 import lldb
 
 
-class PyObject(object):
+def is_available(lldb_value):
+    """
+    Helper function to check if a variable is available and was not optimized out.
+    """
+    return lldb_value.error.Success()
 
+
+class WrappedObject(object):
     def __init__(self, lldb_value):
         self.lldb_value = lldb_value
 
+    def child(self, name):
+        return self.lldb_value.GetChildMemberWithName(name)
+
+
+class PyObject(WrappedObject):
     def __repr__(self):
         return repr(self.value)
 
@@ -309,6 +320,86 @@ class PyDictObject(PyObject):
         return rv
 
 
+class PyCodeObject(WrappedObject):
+    def addr2line(self, address):
+        """
+        Translated pseudocode from ``Objects/lnotab_notes.txt``
+        """
+        co_lnotab = PyObject.from_value(self.child('co_lnotab')).value
+        assert len(co_lnotab) % 2 == 0
+
+        lineno = addr = 0
+        for addr_incr, line_incr in zip(co_lnotab[::2], co_lnotab[1::2]):
+            addr += ord(addr_incr)
+            if addr > address:
+                return lineno
+            # if line_incr >= 0x80:
+            #     line_incr -= 0x100
+            lineno += ord(line_incr)
+
+        return lineno
+
+
+class PyFrameObject(WrappedObject):
+    def __init__(self, lldb_value):
+        super(PyFrameObject, self).__init__(lldb_value)
+        self.co = PyCodeObject(self.child('f_code'))
+
+    @classmethod
+    def _from_frame_no_walk(cls, frame):
+        """
+        Extract PyFrameObject object from current frame w/o stack walking.
+        """
+        f = frame.variables['f'][0]
+
+        if is_available(f):
+            return cls(f)
+        else:
+            return None
+
+    @classmethod
+    def from_frame(cls, frame):
+        # check if we are in a potential function
+        if frame.name != '_PyEval_EvalFrameDefault':
+            return None
+
+        result = cls._from_frame_no_walk(frame)
+        if result is not None:
+            return result
+
+        # `f` was optimized out in current frame so check parent
+        frame = frame.parent
+        if frame:
+            return cls._from_frame_no_walk(frame)
+
+        return None
+
+    @classmethod
+    def get_pystack(cls, thread):
+        pyframes = []
+        for frame in thread:
+            pyframe = cls.from_frame(frame)
+            if pyframe is not None:
+                pyframes.append(pyframe)
+        return pyframes
+
+    @property
+    def line_number(self):
+        anchor = self.child('f_lineno').unsigned
+        address = self.child('f_lasti').unsigned
+        return self.co.addr2line(address) + anchor
+
+    def to_pythonlike_string(self):
+        lineno = self.line_number
+        co_filename = PyObject.from_value(self.co.child('co_filename')).value
+        co_name = PyObject.from_value(self.co.child('co_name')).value
+        return u'File {co_filename}, line {lineno}, in {co_name}'.format(
+            co_filename=co_filename,
+            co_name=co_name,
+            lineno=lineno,
+        )
+
+
 def pretty_printer(value, internal_dict):
     """Provide a type summary for a PyObject instance.
 
@@ -320,7 +411,22 @@ def pretty_printer(value, internal_dict):
     return repr(PyObject.from_value(value))
 
 
+def full_backtrace(debugger, command, result, internal_dict):
+    target = debugger.GetSelectedTarget()
+    thread = target.GetProcess().GetSelectedThread()
+
+    pystack = PyFrameObject.get_pystack(thread)
+
+    lines = []
+    for pyframe in reversed(pystack):
+        lines.append(u'  ' + pyframe.to_pythonlike_string())
+    print(u'\n'.join(lines))
+
+
 def __lldb_init_module(debugger, internal_dict):
     debugger.HandleCommand(
         'type summary add -F cpython_lldb.pretty_printer PyObject'
+    )
+    debugger.HandleCommand(
+        'command script add -f cpython_lldb.full_backtrace pybt'
     )

@@ -129,5 +129,93 @@ class TestPrettyPrint(BaseTestCase):
         self.assert_lldb_repr(object(), '\'0x[0-9a-f]+\'', code_value='object()')
 
 
+class TestPacktrace(BaseTestCase):
+    maxDiff = 2000
+
+    def assert_backtrace(self, code, breakpoint, backtrace):
+        response = self.run_lldb(
+            code=code,
+            breakpoint=breakpoint,
+            command='pybt',
+        )
+        actual = '\n'.join(
+            line
+            for line in response.splitlines()
+            if line.startswith('  File')
+        )
+        self.assertEqual(actual, backtrace)
+
+    def test_simple(self):
+        code = '''
+def fa():
+    abs(1)
+    return 1
+
+
+def fb():
+    1 + 1
+    fa()
+
+
+def fc():
+    fb()
+
+
+fc()
+'''.lstrip()
+
+        backtrace = '''  File test.py, line 15, in <module>
+  File test.py, line 12, in fc
+  File test.py, line 8, in fb
+  File test.py, line 2, in fa'''
+
+        self.assert_backtrace(code, 'builtin_abs', backtrace)
+
+    def test_class(self):
+        code = '''
+class C(object):
+    def ca(self):
+        abs(1)
+
+    def cb(self):
+        self.ca()
+
+
+class D(object):
+    def __init__(self):
+        self.f_class()
+
+    @classmethod
+    def f_class(cls):
+        cls.f_static()
+
+    @staticmethod
+    def f_static():
+        c = C()
+        c.cb()
+
+
+class E(D):
+    @staticmethod
+    def f_static():
+        D()
+
+
+E()
+'''.lstrip()
+
+        backtrace = '''  File test.py, line 29, in <module>
+  File test.py, line 11, in __init__
+  File test.py, line 15, in f_class
+  File test.py, line 26, in f_static
+  File test.py, line 11, in __init__
+  File test.py, line 15, in f_class
+  File test.py, line 20, in f_static
+  File test.py, line 6, in cb
+  File test.py, line 3, in ca'''
+
+        self.assert_backtrace(code, 'builtin_abs', backtrace)
+
+
 if __name__ == "__main__":
     unittest.main()
