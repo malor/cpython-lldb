@@ -1,29 +1,50 @@
 # coding: utf-8
 
 import os
+import os.path
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 
 
 class BaseTestCase(unittest.TestCase):
+    def run_lldb(self, code, breakpoint, command):
+        old_cwd = os.getcwd()
+        d = tempfile.mkdtemp()
+        try:
+            with open('test.py', 'w') as fp:
+                fp.write(code)
+            args = [
+                'lldb',
+                sys.executable,
+                '-o', 'breakpoint set -r %s' % (breakpoint),
+                '-o', 'run "test.py"',
+                '-o', command,
+                '-o', 'quit'
+            ]
+            return subprocess.check_output(args).decode('utf-8')
+        finally:
+            os.chdir(old_cwd)
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class TestPrettyPrint(BaseTestCase):
     def assert_lldb_repr(self, value, expected, code_value=None):
-        args = [
-            'lldb',
-            sys.executable,
-            '-o', 'breakpoint set -r builtin_id',
-            '-o', 'run -c "id(%s)"' % (code_value or repr(value)),
-            '-o', 'frame info',
-            '-o', 'quit'
-        ]
+        response = self.run_lldb(
+            code='id(%s)' % (code_value or repr(value)),
+            breakpoint='builtin_id',
+            command='frame info',
+        )
 
         actual = [
             line
-            for line in subprocess.check_output(args).decode('utf-8').splitlines()
+            for line in response.splitlines()
             if 'frame #0' in line
         ][-1]
-        match = re.search('v=(.*)\) at', actual)
+        match = re.search(r'v=(.*)\) at', actual)
         self.assertIsNotNone(match)
 
         if isinstance(value, (set, dict)):
@@ -40,8 +61,6 @@ class BaseTestCase(unittest.TestCase):
                 "Expected: %s\nActual: %s" % (expected, match.group(1))
             )
 
-
-class TestPrettyPrint(BaseTestCase):
     def test_int(self):
         self.assert_lldb_repr(-10, '-10')
         self.assert_lldb_repr(0, '0')
