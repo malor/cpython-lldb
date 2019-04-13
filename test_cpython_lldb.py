@@ -136,7 +136,7 @@ class TestPacktrace(BaseTestCase):
         response = self.run_lldb(
             code=code,
             breakpoint=breakpoint,
-            command='pybt',
+            command='py-bt',
         )
         actual = '\n'.join(
             line
@@ -164,10 +164,10 @@ def fc():
 fc()
 '''.lstrip()
 
-        backtrace = '''  File test.py, line 15, in <module>
-  File test.py, line 12, in fc
-  File test.py, line 8, in fb
-  File test.py, line 2, in fa'''
+        backtrace = '''  File "test.py", line 15, in <module>
+  File "test.py", line 12, in fc
+  File "test.py", line 8, in fb
+  File "test.py", line 2, in fa'''
 
         self.assert_backtrace(code, 'builtin_abs', backtrace)
 
@@ -204,15 +204,15 @@ class E(D):
 E()
 '''.lstrip()
 
-        backtrace = '''  File test.py, line 29, in <module>
-  File test.py, line 11, in __init__
-  File test.py, line 15, in f_class
-  File test.py, line 26, in f_static
-  File test.py, line 11, in __init__
-  File test.py, line 15, in f_class
-  File test.py, line 20, in f_static
-  File test.py, line 6, in cb
-  File test.py, line 3, in ca'''
+        backtrace = '''  File "test.py", line 29, in <module>
+  File "test.py", line 11, in __init__
+  File "test.py", line 15, in f_class
+  File "test.py", line 26, in f_static
+  File "test.py", line 11, in __init__
+  File "test.py", line 15, in f_class
+  File "test.py", line 20, in f_static
+  File "test.py", line 6, in cb
+  File "test.py", line 3, in ca'''
 
         self.assert_backtrace(code, 'builtin_abs', backtrace)
 

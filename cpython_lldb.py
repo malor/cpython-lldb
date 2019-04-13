@@ -330,12 +330,15 @@ class PyCodeObject(WrappedObject):
 
         lineno = addr = 0
         for addr_incr, line_incr in zip(co_lnotab[::2], co_lnotab[1::2]):
-            addr += ord(addr_incr)
+            addr_incr = ord(addr_incr)
+            line_incr = ord(line_incr)
+
+            addr += addr_incr
             if addr > address:
                 return lineno
-            # if line_incr >= 0x80:
-            #     line_incr -= 0x100
-            lineno += ord(line_incr)
+            if line_incr >= 0x80:
+                line_incr -= 0x100
+            lineno += line_incr
 
         return lineno
 
@@ -393,7 +396,7 @@ class PyFrameObject(WrappedObject):
         lineno = self.line_number
         co_filename = PyObject.from_value(self.co.child('co_filename')).value
         co_name = PyObject.from_value(self.co.child('co_name')).value
-        return u'File {co_filename}, line {lineno}, in {co_name}'.format(
+        return u'File "{co_filename}", line {lineno}, in {co_name}'.format(
             co_filename=co_filename,
             co_name=co_name,
             lineno=lineno,
@@ -420,6 +423,8 @@ def full_backtrace(debugger, command, result, internal_dict):
     lines = []
     for pyframe in reversed(pystack):
         lines.append(u'  ' + pyframe.to_pythonlike_string())
+
+    print(u'Traceback (most recent call last):')
     print(u'\n'.join(lines))
 
 
@@ -428,5 +433,5 @@ def __lldb_init_module(debugger, internal_dict):
         'type summary add -F cpython_lldb.pretty_printer PyObject'
     )
     debugger.HandleCommand(
-        'command script add -f cpython_lldb.full_backtrace pybt'
+        'command script add -f cpython_lldb.full_backtrace py-bt'
     )

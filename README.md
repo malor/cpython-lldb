@@ -19,6 +19,7 @@ Features
  the following features:
 
 * pretty-priting of built-in types (int, bool, float, bytes, str, none, tuple, list, set, dict)
+* printing of Python-level stack traces
 
 TODO:
 
@@ -40,6 +41,9 @@ chmod +x ~/.lldbinit
 Usage
 =====
 
+Pretty-printing
+---------------
+
 All known `PyObject`'s (i.e. built-in types) are automatically pretty-printed
 when encountered, as if you tried to get `repr()` of something in Python REPL,
 e.g.:
@@ -49,4 +53,18 @@ e.g.:
 (PyObject *) v = 0x0000000100793c00 42
 (lldb) p v->ob_type->tp_name
 (const char *) $3 = 0x000000010017d42a "int"
+```
+
+Stack traces
+------------
+
+Use `py-bt` to print a Python-level stack trace of the current thread, e.g.:
+
+```
+(lldb) py-bt
+Traceback (most recent call last):
+  File "test.py", line 15, in <module>
+  File "test.py", line 12, in fc
+  File "test.py", line 8, in fb
+  File "test.py", line 2, in fa
 ```
