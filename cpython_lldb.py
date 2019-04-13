@@ -363,7 +363,7 @@ class PyFrameObject(WrappedObject):
     @classmethod
     def from_frame(cls, frame):
         # check if we are in a potential function
-        if frame.name != '_PyEval_EvalFrameDefault':
+        if frame.name not in ('_PyEval_EvalFrameDefault', 'PyEval_EvalFrameEx'):
             return None
 
         result = cls._from_frame_no_walk(frame)
