@@ -14,9 +14,6 @@ class BaseTestCase(unittest.TestCase):
             sys.executable,
             '-o', 'breakpoint set -r builtin_id',
             '-o', 'run -c "id(%s)"' % (code_value or repr(value)),
-            '-o', 'script import sys',
-            '-o', 'script sys.path.insert(0, "%s")' % os.path.dirname(os.path.abspath(__file__)),
-            '-o', 'command script import cpython_lldb',
             '-o', 'frame info',
             '-o', 'quit'
         ]
