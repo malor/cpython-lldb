@@ -1,4 +1,10 @@
+import io
+import re
+
 import lldb
+
+
+ENCODING_RE = re.compile(r'^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)')
 
 
 def is_available(lldb_value):
@@ -6,6 +12,24 @@ def is_available(lldb_value):
     Helper function to check if a variable is available and was not optimized out.
     """
     return lldb_value.error.Success()
+
+
+def source_file_encoding(filename):
+    """Determine the text encoding of a Python source file."""
+
+    lines = []
+    with io.open(filename, 'rt', encoding='utf-8') as f:
+        # according to PEP-263 the magic comment must be placed on one of the first two lines
+        lines.append(f.readline())
+        lines.append(f.readline())
+
+    for line in lines:
+        match = re.match(ENCODING_RE, line)
+        if match:
+            return match.group(0)
+
+    # if not defined explicitly, assume it's UTF-8 (which is ASCII-compatible)
+    return 'utf-8'
 
 
 class WrappedObject(object):
@@ -387,17 +411,35 @@ class PyFrameObject(WrappedObject):
         return pyframes
 
     @property
+    def filename(self):
+        return PyObject.from_value(self.co.child('co_filename')).value
+
+    @property
     def line_number(self):
         anchor = self.child('f_lineno').unsigned
         address = self.child('f_lasti').unsigned
         return self.co.addr2line(address) + anchor
 
+    @property
+    def line(self):
+        try:
+            filename = self.filename
+            encoding = source_file_encoding(self.filename)
+
+            with io.open(filename, 'rt', encoding=encoding) as f:
+                return next(
+                    line
+                    for num, line in enumerate(f, 1)
+                    if num == self.line_number
+                )
+        except (IOError, StopIteration):
+            return u'<source code is not available>'
+
     def to_pythonlike_string(self):
         lineno = self.line_number
-        co_filename = PyObject.from_value(self.co.child('co_filename')).value
         co_name = PyObject.from_value(self.co.child('co_name')).value
-        return u'File "{co_filename}", line {lineno}, in {co_name}'.format(
-            co_filename=co_filename,
+        return u'File "{filename}", line {lineno}, in {co_name}'.format(
+            filename=self.filename,
             co_name=co_name,
             lineno=lineno,
         )
@@ -423,6 +465,7 @@ def full_backtrace(debugger, command, result, internal_dict):
     lines = []
     for pyframe in reversed(pystack):
         lines.append(u'  ' + pyframe.to_pythonlike_string())
+        lines.append(u'    ' + pyframe.line.strip())
 
     print(u'Traceback (most recent call last):')
     print(u'\n'.join(lines))

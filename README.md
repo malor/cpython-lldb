@@ -64,7 +64,11 @@ Use `py-bt` to print a Python-level stack trace of the current thread, e.g.:
 (lldb) py-bt
 Traceback (most recent call last):
   File "test.py", line 15, in <module>
+    fc()
   File "test.py", line 12, in fc
+    fb()
   File "test.py", line 8, in fb
+    fa()
   File "test.py", line 2, in fa
+    abs(1)
 ```
