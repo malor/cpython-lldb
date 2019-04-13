@@ -8,7 +8,9 @@ RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
     ln -s /usr/bin/lldb-8 /usr/bin/lldb && \
     mkdir -p /root/.lldb/cpython-lldb
 
-COPY *.py /root/.lldb/cpython-lldb/
+RUN python -m pip install pytest
+
+COPY . /root/.lldb/cpython-lldb/
 RUN echo "command script import /root/.lldb/cpython-lldb/cpython_lldb.py" >> /root/.lldbinit && \
     chmod +x /root/.lldbinit
 
