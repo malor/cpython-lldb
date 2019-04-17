@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "cpython-lldb"
+version = "0.0.1"
+description = "LLDB script for debugging of CPython processes"
+license = "MIT"
+
+authors = [
+    "Roman Podoliaka <roman.podoliaka@gmail.com>",
+]
+
+readme = "README.md"
+repository = "https://github.com/malor/cpython-lldb"
+homepage = "https://github.com/malor/cpython-lldb"
+
+keywords = ["debugging", "lldb", "cpython"]
+
+[tool.poetry.dependencies]
+python = "~2.7 || ^3.4"
+
+[tool.poetry.dev-dependencies]
+pytest = "^4.4.0"
