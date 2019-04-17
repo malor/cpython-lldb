@@ -12,6 +12,13 @@ matrix:
       env: PY_VERSION=py36
     - name: "Python 3.7"
       env: PY_VERSION=py37
+    - name: "Python 3.7.2 on Mac OS 10.14.3"
+      os: osx
+      osx_image: xcode10.2
+      language: shell
+      before_install: pip3 install poetry && poetry install && echo "command script import cpython_lldb" >> ~/.lldbinit && chmod +x ~/.lldbinit
+      script: poetry run pytest -v tests/
+      services:
 
 services:
   - docker
