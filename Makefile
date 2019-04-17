@@ -21,7 +21,7 @@ test: build-image
 		--security-opt seccomp:unconfined --cap-add=SYS_PTRACE \
 		-e PYTHONHASHSEED=1 \
 		cpython-lldb:$(PY_VERSION) \
-		bash -c "cd /root/.lldb/cpython-lldb && pytest -vv tests/"
+		bash -c "cd /root/.lldb/cpython-lldb && poetry run pytest -vv tests/"
 
 test-py34: PY_VERSION=3.4
 test-py34: test
