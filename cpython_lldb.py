@@ -531,8 +531,11 @@ def full_backtrace(debugger, command, result, internal_dict):
         lines.append(u'  ' + pyframe.to_pythonlike_string())
         lines.append(u'    ' + pyframe.line.strip())
 
-    print(u'Traceback (most recent call last):')
-    print(u'\n'.join(lines))
+    if lines:
+        print(u'Traceback (most recent call last):')
+        print(u'\n'.join(lines))
+    else:
+        print(u'No Python traceback found (symbols might be missing)!')
 
 
 def __lldb_init_module(debugger, internal_dict):

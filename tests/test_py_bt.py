@@ -12,11 +12,12 @@ def extract_traceback(response):
     return list(itertools.takewhile(before_end, itertools.dropwhile(before_start, lines)))[1:]
 
 
-def assert_backtrace(code, breakpoint, expected):
+def assert_backtrace(code, breakpoint, expected, no_symbols=False):
     response = run_lldb(
         code=code,
         breakpoint=breakpoint,
         command='py-bt',
+        no_symbols=no_symbols,
     )
     actual = u'\n'.join(extract_traceback(response))
 
@@ -111,3 +112,29 @@ Traceback (most recent call last):
     abs(1)'''.lstrip()
 
     assert_backtrace(code, 'builtin_abs', backtrace)
+
+
+def test_without_symbols():
+    code = '''
+def f():
+    abs(1)
+
+f()
+'''.lstrip()
+
+    backtrace = 'No Python traceback found (symbols might be missing)!'
+
+    assert_backtrace(code, 'builtin_abs', backtrace, no_symbols=True)
+
+
+def test_no_backtrace():
+    code = '''
+def f():
+    abs(1)
+
+f()
+'''.lstrip()
+
+    backtrace = 'No Python traceback found (symbols might be missing)!'
+
+    assert_backtrace(code, 'breakpoint_does_not_exist', backtrace)
