@@ -368,6 +368,9 @@ class PyCodeObject(WrappedObject):
 
 
 class PyFrameObject(WrappedObject):
+
+    typename = 'frame'
+
     def __init__(self, lldb_value):
         super(PyFrameObject, self).__init__(lldb_value)
         self.co = PyCodeObject(self.child('f_code'))
@@ -377,29 +380,90 @@ class PyFrameObject(WrappedObject):
         """
         Extract PyFrameObject object from current frame w/o stack walking.
         """
-        f = frame.variables['f'][0]
-
-        if is_available(f):
-            return cls(f)
+        f = frame.variables['f']
+        if f and is_available(f[0]):
+            return cls(f[0])
         else:
             return None
 
     @classmethod
+    def _from_frame_heuristic(cls, frame):
+        """Extract PyFrameObject object from current frame using heuristic.
+
+        When CPython is compiled with aggressive optimizations, the location
+        of PyFrameObject variable f can sometimes be lost. Usually, we still
+        can figure it out by analyzing the state of CPU registers. This is not
+        very reliable, because we basically try to cast the value stored in
+        each register to (PyFrameObject*) and see if it produces a valid
+        PyObject object.
+
+        This becomes especially ugly when there is more than one PyFrameObject*
+        in CPU registers at the same time. In this case we are looking for the
+        frame with a parent, that we have not seen yet.
+        """
+
+        # TODO: this is specific to x86-64 at the moment; try to generalize this later
+        REGISTERS = (
+            'rax', 'rbx', 'rcx', 'rdx',
+            'rsp', 'rbp', 'rdi', 'rsi',
+            'r8', 'r9', 'r10', 'r11',
+            'r12', 'r13', 'r14', 'r15',
+        )
+
+        target = frame.GetThread().GetProcess().GetTarget()
+        object_type = target.FindFirstType('PyObject')
+        frame_type = target.FindFirstType('PyFrameObject')
+
+        found_frames = []
+        for register in REGISTERS:
+            sbvalue = frame.register[register]
+
+            # ignore unavailable registers or null pointers
+            if not sbvalue or not sbvalue.unsigned:
+                continue
+            # and things that are not valid PyFrameObjects
+            pyobject = PyObject(sbvalue.Cast(object_type.GetPointerType()))
+            if pyobject.typename != PyFrameObject.typename:
+                continue
+
+            found_frames.append(PyFrameObject(sbvalue.Cast(frame_type.GetPointerType())))
+
+        # sometimes the parent _PyEval_EvalFrameDefault frame contains two
+        # PyFrameObject's - the one that is currently being executed and its
+        # parent, so we need to filter out the latter
+        found_frames_addresses = [frame.lldb_value.unsigned for frame in found_frames]
+        eligible_frames = [
+            frame for frame in found_frames
+            if frame.child('f_back').unsigned not in found_frames_addresses
+        ]
+
+        if eligible_frames:
+            return eligible_frames[0]
+
+    @classmethod
     def from_frame(cls, frame):
+        if frame is None:
+            return None
+
         # check if we are in a potential function
         if frame.name not in ('_PyEval_EvalFrameDefault', 'PyEval_EvalFrameEx'):
             return None
 
-        result = cls._from_frame_no_walk(frame)
-        if result is not None:
-            return result
-
-        # `f` was optimized out in current frame so check parent
-        frame = frame.parent
-        if frame:
-            return cls._from_frame_no_walk(frame)
-
-        return None
+        # try different methods of getting PyFrameObject before giving up
+        methods = (
+            # normally, we just need to check the location of `f` variable in the current frame
+            cls._from_frame_no_walk,
+            # but sometimes, it's only available in the parent frame
+            lambda frame: frame.parent and cls._from_frame_no_walk(frame.parent),
+            # when aggressive optimizations are enabled, we need to check the CPU registers
+            cls._from_frame_heuristic,
+            # and the registers in the parent frame as well
+            lambda frame: frame.parent and cls._from_frame_heuristic(frame.parent),
+        )
+        for method in methods:
+            result = method(frame)
+            if result is not None:
+                return result
 
     @classmethod
     def get_pystack(cls, thread):
