@@ -2,7 +2,7 @@ ARG PY_VERSION=latest
 FROM python:${PY_VERSION}
 
 RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
-    echo "deb http://apt.llvm.org/stretch/ llvm-toolchain-stretch-8 main" >> /etc/apt/sources.list && \
+    echo "deb http://apt.llvm.org/buster/ llvm-toolchain-buster-8 main" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get install -y lldb-8 && \
     ln -s /usr/bin/lldb-8 /usr/bin/lldb && \
