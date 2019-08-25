@@ -17,7 +17,7 @@ one might still prefer to use LLDB as a debugger, e.g. on Mac OS.
 Features
 ========
 
-`cpython_lldb` currently targets (== is tested on) CPython 3.4+ and supports
+`cpython_lldb` currently targets (== is tested on) CPython 3.5+ and supports
  the following features:
 
 * pretty-priting of built-in types (int, bool, float, bytes, str, none, tuple, list, set, dict)
@@ -194,11 +194,10 @@ $ make test
 To run the tests against a specific CPython version do:
 
 ```
-$ make test-py34
+$ make test-pyXX
 ```
 
 Supported versions are:
-* `py34`
 * `py35`
 * `py36`
 * `py37`
