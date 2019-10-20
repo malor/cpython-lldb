@@ -201,6 +201,7 @@ Supported versions are:
 * `py35`
 * `py36`
 * `py37`
+* `py38`
 
 
 Contributors

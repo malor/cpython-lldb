@@ -12,6 +12,9 @@ build-image-py36: build-image
 build-image-py37: PY_VERSION=3.7
 build-image-py37: build-image
 
+build-image-py38: PY_VERSION=3.8
+build-image-py38: build-image
+
 
 test: build-image
 	docker run -t -i --rm \
@@ -28,3 +31,6 @@ test-py36: test
 
 test-py37: PY_VERSION=3.7
 test-py37: test
+
+test-py38: PY_VERSION=3.8
+test-py38: test

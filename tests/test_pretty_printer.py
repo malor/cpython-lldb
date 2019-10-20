@@ -3,9 +3,13 @@ import re
 from .conftest import run_lldb
 
 
-def assert_lldb_repr(value, expected, code_value=None):
+def lldb_repr_from_frame(value):
+    # set a breakpoint in the implementation of the builtin function id(), that
+    # is conveniently called with a single argument (v), which representation
+    # we are trying to scrape from the LLDB output. When the breakpoint is hit,
+    # the argument value will be pretty-printed by `frame info` command
     response = run_lldb(
-        code='id(%s)' % (code_value or repr(value)),
+        code='id(%s)' % value,
         breakpoint='builtin_id',
         command='frame info',
     )
@@ -16,6 +20,33 @@ def assert_lldb_repr(value, expected, code_value=None):
         if 'frame #0' in line
     ][-1]
     match = re.search(r'v=(.*)\) at', actual)
+
+    return match
+
+
+def lldb_repr_from_register(value):
+    # same as lldb_repr_from_frame(), but also works in cases when the CPython
+    # build does not provide information on the arguments of builtin_id():
+    # here we use the fact that the value of `v` argument is passed in the
+    # CPU register RSI according to the rules of AMD64 calling convention
+    response = run_lldb(
+        code='id(%s)' % value,
+        breakpoint='builtin_id',
+        command='print (PyObject*) $rsi',
+    )
+    actual = [
+        line.strip()
+        for line in response.splitlines()
+        if '(PyObject *) $' in line
+    ][-1]
+    match = re.search(r'^\(PyObject \*\) \$[^=]+ = 0x[0-9a-f]+ (.*)$', actual)
+
+    return match
+
+
+def assert_lldb_repr(value, expected, code_value=None):
+    value_repr = code_value or repr(value)
+    match = lldb_repr_from_frame(value_repr) or lldb_repr_from_register(value_repr)
     assert match is not None
 
     if isinstance(value, (set, dict)):
@@ -102,4 +133,4 @@ def test_dict():
                       ' 9: 9, 10: 10, 11: 11, 12: 12, 13: 13, 14: 14, 15: 15}'))
 
 def test_unsupported():
-    assert_lldb_repr(object(), '\'0x[0-9a-f]+\'', code_value='object()')
+    assert_lldb_repr(object(), '(\'0x[0-9a-f]+\')|(\'No value\')', code_value='object()')
