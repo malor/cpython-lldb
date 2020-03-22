@@ -1,4 +1,5 @@
-import contextlib
+import io
+import itertools
 import os
 import shutil
 import subprocess
@@ -8,8 +9,10 @@ import tempfile
 import pytest
 
 
-@contextlib.contextmanager
-def strip_symbols(executable):
+@pytest.fixture
+def strip_symbols():
+    executable = sys.executable
+
     libpython = subprocess.check_output("ldd %s | grep libpython | awk '{print $3}'" % (executable), shell=True).decode("utf-8").strip()
     libpython_backup = libpython + ".backup"
 
@@ -23,17 +26,26 @@ def strip_symbols(executable):
     subprocess.check_call("cp %s %s" % (libpython_backup, libpython), shell=True)
 
 
+def extract_command_output(lldb_output, command):
+    wo_head = itertools.dropwhile(lambda line: line != '(lldb) {}'.format(command),
+                                  lldb_output.splitlines())
+    wo_tail = itertools.takewhile(lambda line: line != '(lldb) quit',
+                                  wo_head)
+
+    return u'\n'.join(list(wo_tail)[1:]) + '\n'
+
 
 def run_lldb(code, breakpoint, command, no_symbols=False):
     old_cwd = os.getcwd()
     d = tempfile.mkdtemp()
     try:
-        with open('test.py', 'w') as fp:
+        with io.open('test.py', 'wb') as fp:
+            if isinstance(code, str):
+                code = code.encode('utf-8')
+
             fp.write(code)
 
-        args = [
-            'lldb',
-        ]
+        args = ['lldb']
         if no_symbols:
             args += ['-o', 'settings set symbols.enable-external-lookup false']
         args += [
@@ -44,11 +56,8 @@ def run_lldb(code, breakpoint, command, no_symbols=False):
             '-o', 'quit'
         ]
 
-        if no_symbols:
-            with strip_symbols(sys.executable):
-                return subprocess.check_output(args).decode('utf-8')
-        else:
-            return subprocess.check_output(args).decode('utf-8')
+        return extract_command_output(subprocess.check_output(args).decode('utf-8'),
+                                      command)
     finally:
         os.chdir(old_cwd)
         shutil.rmtree(d, ignore_errors=True)

@@ -22,12 +22,13 @@ Features
 
 * pretty-priting of built-in types (int, bool, float, bytes, str, none, tuple, list, set, dict)
 * printing of Python-level stack traces
+* listing of the source code
 
 TODO:
 
+* walking up and down the Python call stack
 * stack traces w/ mixed stacks (e.g. involving calls to clibs)
 * local variables
-* code listing
 
 
 Installation
@@ -85,6 +86,58 @@ Traceback (most recent call last):
     fa()
   File "test.py", line 2, in fa
     abs(1)
+```
+
+Listing of the source code
+--------------------------
+
+Use `py-list` to list the source code of the Python module that is currently
+being executed in the selected thread, e.g.:
+
+```
+(lldb) py-list
+    1    SOME_CONST = 42
+    2
+    3
+    4    def fa():
+   >5        abs(1)
+    6        return 1
+    7
+    8
+    9    def fb():
+   10        1 + 1
+```
+
+The command also accepts optional `start` and `end` arguments that allow to
+list the source code within a specific range of lines, e.g.:
+
+```
+(lldb) py-list 4
+    4    def fa():
+   >5        abs(1)
+    6        return 1
+    7
+    8
+    9    def fb():
+   10        1 + 1
+   11        fa()
+   12
+   13
+   14    def fc():
+```
+
+or:
+
+```
+(lldb) py-list 4 11
+    4    def fa():
+   >5        abs(1)
+    6        return 1
+    7
+    8
+    9    def fb():
+   10        1 + 1
+   11        fa()
 ```
 
 Potential issues and how to solve them

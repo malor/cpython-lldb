@@ -1,10 +1,23 @@
 import io
+import locale
 import re
+import shlex
+import sys
 
 import lldb
 
 
+IS_PY3 = sys.version_info.major == 3
 ENCODING_RE = re.compile(r'^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)')
+
+
+def write_string(result, string, end=u'\n', encoding=locale.getpreferredencoding()):
+    """Helper function for writing to SBCommandReturnObject that expects bytes on py2 and str on py3."""
+
+    if IS_PY3:
+        result.write(string + end)
+    else:
+        result.write((string + end).encode(encoding=encoding))
 
 
 def is_available(lldb_value):
@@ -17,19 +30,33 @@ def is_available(lldb_value):
 def source_file_encoding(filename):
     """Determine the text encoding of a Python source file."""
 
-    lines = []
-    with io.open(filename, 'rt', encoding='utf-8') as f:
+    with io.open(filename, 'rt', encoding='latin-1') as f:
         # according to PEP-263 the magic comment must be placed on one of the first two lines
-        lines.append(f.readline())
-        lines.append(f.readline())
-
-    for line in lines:
-        match = re.match(ENCODING_RE, line)
-        if match:
-            return match.group(0)
+        for _ in range(2):
+            line = f.readline()
+            match = re.match(ENCODING_RE, line)
+            if match:
+                return match.group(1)
 
     # if not defined explicitly, assume it's UTF-8 (which is ASCII-compatible)
     return 'utf-8'
+
+
+def source_file_lines(filename, start, end, encoding='utf-8'):
+    """Return the contents of [start; end) lines of the source file.
+
+    1 based indexing is used for convenience.
+    """
+
+    lines = []
+    with io.open(filename, 'rt', encoding=encoding) as f:
+        for (line_num, line) in enumerate(f, 1):
+            if start <= line_num < end:
+                lines.append(line)
+            elif line_num > end:
+                break
+
+    return lines
 
 
 class WrappedObject(object):
@@ -354,8 +381,8 @@ class PyCodeObject(WrappedObject):
 
         lineno = addr = 0
         for addr_incr, line_incr in zip(co_lnotab[::2], co_lnotab[1::2]):
-            addr_incr = ord(addr_incr)
-            line_incr = ord(line_incr)
+            addr_incr = ord(addr_incr) if isinstance(addr_incr, bytes) else addr_incr
+            line_incr = ord(line_incr) if isinstance(line_incr, bytes) else line_incr
 
             addr += addr_incr
             if addr > address:
@@ -487,16 +514,11 @@ class PyFrameObject(WrappedObject):
     @property
     def line(self):
         try:
-            filename = self.filename
             encoding = source_file_encoding(self.filename)
-
-            with io.open(filename, 'rt', encoding=encoding) as f:
-                return next(
-                    line
-                    for num, line in enumerate(f, 1)
-                    if num == self.line_number
-                )
-        except (IOError, StopIteration):
+            return source_file_lines(self.filename,
+                                     self.line_number, self.line_number + 1,
+                                     encoding=encoding)[0]
+        except (IOError, IndexError):
             return u'<source code is not available>'
 
     def to_pythonlike_string(self):
@@ -532,10 +554,85 @@ def full_backtrace(debugger, command, result, internal_dict):
         lines.append(u'    ' + pyframe.line.strip())
 
     if lines:
-        print(u'Traceback (most recent call last):')
-        print(u'\n'.join(lines))
+        write_string(result, u'Traceback (most recent call last):')
+        write_string(result, u'\n'.join(lines))
     else:
-        print(u'No Python traceback found (symbols might be missing)!')
+        write_string(result, u'No Python traceback found (symbols might be missing)!')
+
+
+def list_code(debugger, command, result, internal_dict):
+    """List the source code of the Python module that is currently being executed.
+
+    Use
+
+        py-list
+
+    to list the source code around (5 lines before and after) the line that is
+    currently being executed.
+
+
+    Use
+
+        py-list start
+
+    to list the source code starting at a different line number.
+
+
+    Use
+
+        py-list start end
+
+    to list the source code within a specific range of lines.
+    """
+
+    # optional arguments allow to list the source code within a specific range
+    # of lines instead of the context around the line that is being executed
+    args = shlex.split(command)
+    if len(args) > 2:
+        write_string(result, u'Usage: py-list [start [end]]')
+        return
+    elif len(args) == 2:
+        start = int(args[0])
+        end = int(args[1])
+    elif len(args) == 1:
+        start = int(args[0])
+        end = start + 10
+    else:
+        start = None
+        end = None
+
+    # find the most recent Python frame in the callstack of the selected thread
+    target = debugger.GetSelectedTarget()
+    thread = target.GetProcess().GetSelectedThread()
+    pystack = PyFrameObject.get_pystack(thread)
+    if not pystack:
+        write_string(result, u'<source code is not available>')
+        return
+
+    # determine the location of the module and the exact line that is currently
+    # being executed
+    current_frame = pystack[0]
+    filename = current_frame.filename
+    current_line_num = current_frame.line_number
+
+    # default to showing the context around the current line, unless overriden
+    # by optional arguments
+    start = start or max(current_line_num - 5, 1)
+    end = end or (current_line_num + 5)
+
+    try:
+        encoding = source_file_encoding(filename)
+        lines = source_file_lines(filename, start, end + 1, encoding=encoding)
+        for (i, line) in enumerate(lines, start):
+            # highlight the current line
+            if i == current_line_num:
+                prefix = u'>{}'.format(i)
+            else:
+                prefix = u'{}'.format(i)
+
+            write_string(result, u'{:>5}    {}'.format(prefix, line.rstrip()))
+    except IOError:
+        write_string(result, u'<source code is not available>')
 
 
 def __lldb_init_module(debugger, internal_dict):
@@ -544,4 +641,7 @@ def __lldb_init_module(debugger, internal_dict):
     )
     debugger.HandleCommand(
         'command script add -f cpython_lldb.full_backtrace py-bt'
+    )
+    debugger.HandleCommand(
+        'command script add -f cpython_lldb.list_code py-list'
     )

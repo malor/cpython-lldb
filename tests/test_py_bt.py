@@ -1,27 +1,6 @@
-import itertools
-
+import pytest
 
 from .conftest import run_lldb
-
-
-def extract_traceback(response):
-    before_start = lambda line: line != '(lldb) py-bt'
-    before_end = lambda line: line != '(lldb) quit'
-    lines = response.splitlines()
-
-    return list(itertools.takewhile(before_end, itertools.dropwhile(before_start, lines)))[1:]
-
-
-def assert_backtrace(code, breakpoint, expected, no_symbols=False):
-    response = run_lldb(
-        code=code,
-        breakpoint=breakpoint,
-        command='py-bt',
-        no_symbols=no_symbols,
-    )
-    actual = u'\n'.join(extract_traceback(response))
-
-    assert actual == expected
 
 
 def test_simple():
@@ -52,9 +31,15 @@ Traceback (most recent call last):
   File "test.py", line 8, in fb
     fa()
   File "test.py", line 2, in fa
-    abs(1)'''.lstrip()
+    abs(1)
+'''.lstrip()
 
-    assert_backtrace(code, 'builtin_abs', backtrace)
+    actual = run_lldb(
+        code=code,
+        breakpoint='builtin_abs',
+        command='py-bt',
+    )
+    assert actual == backtrace
 
 
 def test_class():
@@ -109,11 +94,18 @@ Traceback (most recent call last):
   File "test.py", line 6, in cb
     self.ca()
   File "test.py", line 3, in ca
-    abs(1)'''.lstrip()
+    abs(1)
+'''.lstrip()
 
-    assert_backtrace(code, 'builtin_abs', backtrace)
+    actual = run_lldb(
+        code=code,
+        breakpoint='builtin_abs',
+        command='py-bt',
+    )
+    assert actual == backtrace
 
 
+@pytest.mark.usefixtures('strip_symbols')
 def test_without_symbols():
     code = '''
 def f():
@@ -122,9 +114,15 @@ def f():
 f()
 '''.lstrip()
 
-    backtrace = 'No Python traceback found (symbols might be missing)!'
+    backtrace = 'No Python traceback found (symbols might be missing)!\n'
 
-    assert_backtrace(code, 'builtin_abs', backtrace, no_symbols=True)
+    actual = run_lldb(
+        code=code,
+        breakpoint='builtin_abs',
+        command='py-bt',
+        no_symbols=True,
+    )
+    assert actual == backtrace
 
 
 def test_no_backtrace():
@@ -135,6 +133,12 @@ def f():
 f()
 '''.lstrip()
 
-    backtrace = 'No Python traceback found (symbols might be missing)!'
+    backtrace = 'No Python traceback found (symbols might be missing)!\n'
 
-    assert_backtrace(code, 'breakpoint_does_not_exist', backtrace)
+    actual = run_lldb(
+        code=code,
+        breakpoint='breakpoint_does_not_exist',
+        command='py-bt',
+        no_symbols=True,
+    )
+    assert actual == backtrace
