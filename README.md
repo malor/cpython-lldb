@@ -23,10 +23,10 @@ Features
 * pretty-priting of built-in types (int, bool, float, bytes, str, none, tuple, list, set, dict)
 * printing of Python-level stack traces
 * listing of the source code
+* walking up and down the Python call stack
 
 TODO:
 
-* walking up and down the Python call stack
 * stack traces w/ mixed stacks (e.g. involving calls to clibs)
 * local variables
 
@@ -73,7 +73,7 @@ e.g.:
 Stack traces
 ------------
 
-Use `py-bt` to print a Python-level stack trace of the current thread, e.g.:
+Use `py-bt` to print a full Python-level stack trace of the current thread, e.g.:
 
 ```
 (lldb) py-bt
@@ -88,11 +88,33 @@ Traceback (most recent call last):
     abs(1)
 ```
 
+Walking up and down the call stack
+----------------------------------
+
+Use `py-up` and `py-down` to select an older or a newer Python call stack frame, e.g.:
+
+```
+(lldb) py-up
+  File "/Users/malor/src/cpython/test.py", line 6, in cb
+    self.ca()
+(lldb) py-up
+  File "/Users/malor/src/cpython/test.py", line 20, in f_static
+    c.cb()
+(lldb) py-down
+  File "/Users/malor/src/cpython/test.py", line 6, in cb
+    self.ca()
+(lldb) py-down
+  File "/Users/malor/src/cpython/test.py", line 3, in ca
+    abs(1)
+(lldb) py-down
+*** Newest frame
+```
+
 Listing of the source code
 --------------------------
 
-Use `py-list` to list the source code of the Python module that is currently
-being executed in the selected thread, e.g.:
+Use `py-list` to list the source code that is currently being executed in the selected
+Python frame, e.g.:
 
 ```
 (lldb) py-list

@@ -11,6 +11,11 @@ IS_PY3 = sys.version_info.major == 3
 ENCODING_RE = re.compile(r'^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)')
 
 
+class Direction(object):
+    DOWN = -1
+    UP = 1
+
+
 def write_string(result, string, end=u'\n', encoding=locale.getpreferredencoding()):
     """Helper function for writing to SBCommandReturnObject that expects bytes on py2 and str on py3."""
 
@@ -602,16 +607,13 @@ def list_code(debugger, command, result, internal_dict):
         end = None
 
     # find the most recent Python frame in the callstack of the selected thread
-    target = debugger.GetSelectedTarget()
-    thread = target.GetProcess().GetSelectedThread()
-    pystack = PyFrameObject.get_pystack(thread)
-    if not pystack:
+    current_frame = select_closest_python_frame(debugger)
+    if current_frame is None:
         write_string(result, u'<source code is not available>')
         return
 
     # determine the location of the module and the exact line that is currently
     # being executed
-    current_frame = pystack[0]
     filename = current_frame.filename
     current_line_num = current_frame.line_number
 
@@ -635,6 +637,70 @@ def list_code(debugger, command, result, internal_dict):
         write_string(result, u'<source code is not available>')
 
 
+def move_python_frame(debugger, direction):
+    """Select the next Python frame up or down the call stack."""
+
+    target = debugger.GetSelectedTarget()
+    thread = target.GetProcess().GetSelectedThread()
+
+    current_frame = thread.GetSelectedFrame()
+    if direction == Direction.UP:
+        index_range = range(current_frame.idx + 1, thread.num_frames)
+    else:
+        index_range = reversed(range(0, current_frame.idx))
+
+    for index in index_range:
+        python_frame = PyFrameObject.from_frame(thread.GetFrameAtIndex(index))
+        if python_frame is not None:
+            thread.SetSelectedFrame(index)
+            return python_frame
+
+
+def select_closest_python_frame(debugger, direction=Direction.UP):
+    """Select and return the closest Python frame (or do nothing if the current frame is a Python frame)."""
+
+    target = debugger.GetSelectedTarget()
+    thread = target.GetProcess().GetSelectedThread()
+    frame = thread.GetSelectedFrame()
+
+    python_frame = PyFrameObject.from_frame(frame)
+    if python_frame is None:
+        return move_python_frame(debugger, direction)
+
+    return python_frame
+
+
+def print_frame_summary(result, frame):
+    """Print a short summary of a given Python frame: module and the line being executed."""
+
+    write_string(result, u'  ' + frame.to_pythonlike_string())
+    write_string(result, u'    ' + frame.line.strip())
+
+
+def stack_up(debugger, command, result, internal_dict):
+    """Select an older Python stack frame."""
+
+    select_closest_python_frame(debugger, direction=Direction.UP)
+
+    new_frame = move_python_frame(debugger, direction=Direction.UP)
+    if new_frame is None:
+        write_string(result, u'*** Oldest frame')
+    else:
+        print_frame_summary(result, new_frame)
+
+
+def stack_down(debugger, command, result, internal_dict):
+    """Select a newer Python stack frame."""
+
+    select_closest_python_frame(debugger, direction=Direction.DOWN)
+
+    new_frame = move_python_frame(debugger, direction=Direction.DOWN)
+    if new_frame is None:
+        write_string(result, u'*** Newest frame')
+    else:
+        print_frame_summary(result, new_frame)
+
+
 def __lldb_init_module(debugger, internal_dict):
     debugger.HandleCommand(
         'type summary add -F cpython_lldb.pretty_printer PyObject'
@@ -644,4 +710,10 @@ def __lldb_init_module(debugger, internal_dict):
     )
     debugger.HandleCommand(
         'command script add -f cpython_lldb.list_code py-list'
+    )
+    debugger.HandleCommand(
+        'command script add -f cpython_lldb.stack_up py-up'
+    )
+    debugger.HandleCommand(
+        'command script add -f cpython_lldb.stack_down py-down'
     )
