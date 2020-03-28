@@ -35,7 +35,9 @@ def extract_command_output(lldb_output, command):
     return u'\n'.join(list(wo_tail)[1:]) + '\n'
 
 
-def run_lldb(code, breakpoint, command, no_symbols=False):
+def run_lldb(code, breakpoint, commands, no_symbols=False):
+    commands = list(itertools.chain(*(('-o', command) for command in commands)))
+
     old_cwd = os.getcwd()
     d = tempfile.mkdtemp()
     try:
@@ -52,12 +54,11 @@ def run_lldb(code, breakpoint, command, no_symbols=False):
             sys.executable,
             '-o', 'breakpoint set -r %s' % (breakpoint),
             '-o', 'run "test.py"',
-            '-o', command,
+            *commands,
             '-o', 'quit'
         ]
 
-        return extract_command_output(subprocess.check_output(args).decode('utf-8'),
-                                      command)
+        return subprocess.check_output(args).decode('utf-8')
     finally:
         os.chdir(old_cwd)
         shutil.rmtree(d, ignore_errors=True)

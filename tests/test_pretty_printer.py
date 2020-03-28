@@ -11,7 +11,7 @@ def lldb_repr_from_frame(value):
     response = run_lldb(
         code='id(%s)' % value,
         breakpoint='builtin_id',
-        command='frame info',
+        commands=['frame info'],
     )
 
     actual = [
@@ -32,7 +32,7 @@ def lldb_repr_from_register(value):
     response = run_lldb(
         code='id(%s)' % value,
         breakpoint='builtin_id',
-        command='print (PyObject*) $rsi',
+        commands=['print (PyObject*) $rsi'],
     )
     actual = [
         line.strip()

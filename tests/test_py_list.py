@@ -1,4 +1,4 @@
-from .conftest import run_lldb
+from .conftest import extract_command_output, run_lldb
 
 
 CODE = u'''
@@ -36,11 +36,12 @@ def test_default():
     9    def fb():
    10        1 + 1
 '''
-    actual = run_lldb(
+    response = run_lldb(
         code=CODE,
         breakpoint='builtin_abs',
-        command='py-list',
+        commands=['py-list'],
     )
+    actual = extract_command_output(response, 'py-list')
 
     assert actual == expected
 
@@ -59,11 +60,12 @@ def test_start():
    13    
    14    def fc():
 '''
-    actual = run_lldb(
+    response = run_lldb(
         code=CODE,
         breakpoint='builtin_abs',
-        command='py-list 4',
+        commands=['py-list 4'],
     )
+    actual = extract_command_output(response, 'py-list 4')
 
     assert actual == expected
 
@@ -79,11 +81,12 @@ def test_start_end():
    10        1 + 1
    11        fa()
 '''
-    actual = run_lldb(
+    response = run_lldb(
         code=CODE,
         breakpoint='builtin_abs',
-        command='py-list 4 11',
+        commands=['py-list 4 11'],
     )
+    actual = extract_command_output(response, 'py-list 4 11')
 
     assert actual == expected
 
@@ -105,10 +108,35 @@ def test_non_default_encoding():
    11    def fb():
    12        1 + 1
 '''
-    actual = run_lldb(
+    response = run_lldb(
         code=code,
         breakpoint='builtin_abs',
-        command='py-list',
+        commands=['py-list'],
     )
+    actual = extract_command_output(response, 'py-list')
+
+    assert actual == expected
+
+
+def test_not_the_most_recent_frame():
+    expected = u'''\
+    6        return 1
+    7    
+    8    
+    9    def fb():
+   10        1 + 1
+  >11        fa()
+   12    
+   13    
+   14    def fc():
+   15        fb()
+   16    
+'''
+    response = run_lldb(
+        code=CODE,
+        breakpoint='builtin_abs',
+        commands=['py-up', 'py-list'],
+    )
+    actual = extract_command_output(response, 'py-list')
 
     assert actual == expected

@@ -1,6 +1,6 @@
 import pytest
 
-from .conftest import run_lldb
+from .conftest import extract_command_output, run_lldb
 
 
 def test_simple():
@@ -34,11 +34,12 @@ Traceback (most recent call last):
     abs(1)
 '''.lstrip()
 
-    actual = run_lldb(
+    response = run_lldb(
         code=code,
         breakpoint='builtin_abs',
-        command='py-bt',
+        commands=['py-bt'],
     )
+    actual = extract_command_output(response, 'py-bt')
     assert actual == backtrace
 
 
@@ -97,11 +98,12 @@ Traceback (most recent call last):
     abs(1)
 '''.lstrip()
 
-    actual = run_lldb(
+    response = run_lldb(
         code=code,
         breakpoint='builtin_abs',
-        command='py-bt',
+        commands=['py-bt'],
     )
+    actual = extract_command_output(response, 'py-bt')
     assert actual == backtrace
 
 
@@ -116,12 +118,13 @@ f()
 
     backtrace = 'No Python traceback found (symbols might be missing)!\n'
 
-    actual = run_lldb(
+    response = run_lldb(
         code=code,
         breakpoint='builtin_abs',
-        command='py-bt',
+        commands=['py-bt'],
         no_symbols=True,
     )
+    actual = extract_command_output(response, 'py-bt')
     assert actual == backtrace
 
 
@@ -135,10 +138,11 @@ f()
 
     backtrace = 'No Python traceback found (symbols might be missing)!\n'
 
-    actual = run_lldb(
+    response = run_lldb(
         code=code,
         breakpoint='breakpoint_does_not_exist',
-        command='py-bt',
+        commands=['py-bt'],
         no_symbols=True,
     )
+    actual = extract_command_output(response, 'py-bt')
     assert actual == backtrace
