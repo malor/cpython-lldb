@@ -22,13 +22,13 @@ Features
 
 * pretty-priting of built-in types (int, bool, float, bytes, str, none, tuple, list, set, dict)
 * printing of Python-level stack traces
+* printing of local variables
 * listing of the source code
 * walking up and down the Python call stack
 
 TODO:
 
 * stack traces w/ mixed stacks (e.g. involving calls to clibs)
-* local variables
 
 
 Installation
@@ -108,6 +108,24 @@ Use `py-up` and `py-down` to select an older or a newer Python call stack frame,
     abs(1)
 (lldb) py-down
 *** Newest frame
+```
+
+Printing of local variables
+---------------------------
+
+Use `py-locals` to print the values of local variables in the selected frame:
+
+```
+(lldb) py-locals
+a = 42
+args = (1, 2, 3)
+b = [1, u'hello', u'\\u0442\\u0435\\u0441\\u0442']
+c = ([1], 2, [[3]])
+d = u'test'
+e = {u'a': -1, u'b': 0, u'c': 1}
+eggs = 42
+kwargs = {u'foo': 'spam'}
+spam = u'foobar'
 ```
 
 Listing of the source code
