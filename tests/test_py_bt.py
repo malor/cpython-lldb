@@ -146,3 +146,28 @@ f()
     )
     actual = extract_command_output(response, 'py-bt')
     assert actual == backtrace
+
+
+def test_frame_finding_heuristic_on_short_call_stacks():
+    code = u'''
+def f():
+    abs(1)
+
+f()
+'''.lstrip()
+
+    backtrace = u'''
+Traceback (most recent call last):
+  File "test.py", line 4, in <module>
+    f()
+  File "test.py", line 2, in f
+    abs(1)
+'''.lstrip()
+
+    response = run_lldb(
+        code=code,
+        breakpoint='builtin_abs',
+        commands=['py-bt'],
+    )
+    actual = extract_command_output(response, 'py-bt')
+    assert actual == backtrace

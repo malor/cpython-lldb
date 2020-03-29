@@ -92,11 +92,15 @@ class PyObject(WrappedObject):
 
     @staticmethod
     def typename_of(v):
-        addr = v.GetValueForExpressionPath('->ob_type->tp_name').unsigned
-        process = v.GetProcess()
-        tp_name = process.ReadCStringFromMemory(addr, 256, lldb.SBError())
+        try:
+            addr = v.GetValueForExpressionPath('->ob_type->tp_name').unsigned
+            process = v.GetProcess()
+            tp_name = process.ReadCStringFromMemory(addr, 256, lldb.SBError())
 
-        return tp_name
+            return tp_name
+        except UnicodeDecodeError:
+            # if we fail to read tp_name, then it's likely not a PyObject
+            return u'unknown'
 
     @property
     def typename(self):
