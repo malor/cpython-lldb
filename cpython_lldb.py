@@ -705,6 +705,39 @@ def stack_down(debugger, command, result, internal_dict):
         print_frame_summary(result, new_frame)
 
 
+def print_locals(debugger, command, result, internal_dict):
+    """Print the values of local variables in the selected Python frame."""
+
+    current_frame = select_closest_python_frame(debugger, direction=Direction.UP)
+    if current_frame is None:
+        write_string(result, u'No locals found (symbols might be missing!)')
+        return
+
+    # merge logic is based on the implementation of PyFrame_LocalsToFast()
+    merged_locals = {}
+
+    # f_locals contains top-level declarations (e.g. functions or classes)
+    # of a frame executing a Python module, rather than a function
+    f_locals = current_frame.child('f_locals')
+    if f_locals.unsigned != 0:
+        for (k, v) in PyDictObject(f_locals).value.items():
+            merged_locals[k.value] = v
+
+    # f_localsplus stores local variables and arguments of function frames
+    fast_locals = current_frame.child('f_localsplus')
+    f_code = PyCodeObject(current_frame.child('f_code'))
+    varnames = PyTupleObject(f_code.child('co_varnames'))
+    for (i, name) in enumerate(varnames.value):
+        value = fast_locals.GetChildAtIndex(i, 0, True)
+        if value.unsigned != 0:
+            merged_locals[name.value] = PyObject.from_value(value).value
+        else:
+            merged_locals.pop(name, None)
+
+    for name in sorted(merged_locals.keys()):
+        write_string(result, u'{} = {}'.format(name, repr(merged_locals[name])))
+
+
 def __lldb_init_module(debugger, internal_dict):
     debugger.HandleCommand(
         'type summary add -F cpython_lldb.pretty_printer PyObject'
@@ -720,4 +753,7 @@ def __lldb_init_module(debugger, internal_dict):
     )
     debugger.HandleCommand(
         'command script add -f cpython_lldb.stack_down py-down'
+    )
+    debugger.HandleCommand(
+        'command script add -f cpython_lldb.print_locals py-locals'
     )
