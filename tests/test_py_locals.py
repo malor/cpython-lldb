@@ -11,7 +11,7 @@ def fb(spam, *args, eggs=42, **kwargs):
     b = [1, 'hello', u'тест']
     c = ([1], 2, [[3]])
     d = 'test'
-    e = {'a': -1, 'b': 0, 'c': 1}
+    e = {'a': -1}
 
     fa()
 
@@ -25,18 +25,30 @@ fc()
 
 
 def test_locals():
-    expected = u'''\
+    # this could be replaced with a regex, but a plain string seems to be more readable
+    expected_py2 = u'''\
 a = 42
 args = (1, 2, 3)
 b = [1, u'hello', u'\\u0442\\u0435\\u0441\\u0442']
 c = ([1], 2, [[3]])
 d = u'test'
-e = {u'a': -1, u'b': 0, u'c': 1}
+e = {u'a': -1}
 eggs = 42
 kwargs = {u'foo': 'spam'}
 spam = u'foobar'
 '''
 
+    expected_py3 = u'''\
+a = 42
+args = (1, 2, 3)
+b = [1, 'hello', 'тест']
+c = ([1], 2, [[3]])
+d = 'test'
+e = {'a': -1}
+eggs = 42
+kwargs = {'foo': b'spam'}
+spam = 'foobar'
+'''
     response = run_lldb(
         code=CODE,
         breakpoint='builtin_abs',
@@ -44,7 +56,7 @@ spam = u'foobar'
     )
     actual = extract_command_output(response, 'py-locals')
 
-    assert actual == expected
+    assert (actual == expected_py2) or (actual == expected_py3)
 
 
 def test_globals():
