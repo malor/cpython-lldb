@@ -95,26 +95,26 @@ def test_bytes():
 
 
 def test_str():
-    assert_lldb_repr('', "u''")
-    assert_lldb_repr('hello', "u'hello'")
+    assert_lldb_repr('', "u?''")
+    assert_lldb_repr('hello', "u?'hello'")
     assert_lldb_repr(u'привет',
-                     "u'\\\\u043f\\\\u0440\\\\u0438\\\\u0432\\\\u0435\\\\u0442'")
+                     "(u'\\\\u043f\\\\u0440\\\\u0438\\\\u0432\\\\u0435\\\\u0442')|('привет')")
     assert_lldb_repr(u'𐅐𐅀𐅰',
-                     "u'\\\\U00010150\\\\U00010140\\\\U00010170'")
+                     "(u'\\\\U00010150\\\\U00010140\\\\U00010170')|('𐅐𐅀𐅰')")
 
 
 def test_list():
     assert_lldb_repr([], r'\[\]')
     assert_lldb_repr([1, 2, 3], r'\[1, 2, 3\]')
     assert_lldb_repr([1, 3.14159, u'hello', False, None],
-                     r'\[1, 3.14159, u\'hello\', False, None\]')
+                     r'\[1, 3.14159, u?\'hello\', False, None\]')
 
 
 def test_tuple():
     assert_lldb_repr((), r'\(\)')
     assert_lldb_repr((1, 2, 3), r'\(1, 2, 3\)')
     assert_lldb_repr((1, 3.14159, u'hello', False, None),
-                     r'\(1, 3.14159, u\'hello\', False, None\)')
+                     r'\(1, 3.14159, u?\'hello\', False, None\)')
 
 def test_set():
     assert_lldb_repr(set(), r'set\(\[\]\)')

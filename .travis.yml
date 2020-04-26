@@ -4,14 +4,23 @@ language: python
 
 matrix:
   include:
-    - name: "Python 3.5"
-      env: PY_VERSION=py35
-    - name: "Python 3.6"
-      env: PY_VERSION=py36
-    - name: "Python 3.7"
-      env: PY_VERSION=py37
-    - name: "Python 3.8"
-      env: PY_VERSION=py38
+    - name: "Python 3.5 @ LLDB 7"
+      env: PY_VERSION=py35 LLDB_VERSION=lldb7
+    - name: "Python 3.6 @ LLDB 7"
+      env: PY_VERSION=py36 LLDB_VERSION=lldb7
+    - name: "Python 3.7 @ LLDB 7"
+      env: PY_VERSION=py37 LLDB_VERSION=lldb7
+    - name: "Python 3.8 @ LLDB 7"
+      env: PY_VERSION=py38 LLDB_VERSION=lldb7
+
+    - name: "Python 3.5 @ LLDB 9"
+      env: PY_VERSION=py35 LLDB_VERSION=lldb9
+    - name: "Python 3.6 @ LLDB 9"
+      env: PY_VERSION=py36 LLDB_VERSION=lldb9
+    - name: "Python 3.7 @ LLDB 9"
+      env: PY_VERSION=py37 LLDB_VERSION=lldb9
+    - name: "Python 3.8 @ LLDB 9"
+      env: PY_VERSION=py38 LLDB_VERSION=lldb9
 
 services:
   - docker
