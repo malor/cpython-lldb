@@ -1,8 +1,9 @@
 PY_VERSION ?= latest
 LLDB_VERSION ?= lldb9
+DOCKER_IMAGE_TAG = $(PY_VERSION)-$(LLDB_VERSION)
 
 build-image:
-	docker build -t cpython-lldb:$(PY_VERSION) --build-arg PY_VERSION=$(PY_VERSION) -f Dockerfile.$(LLDB_VERSION) .
+	docker build -t cpython-lldb:$(DOCKER_IMAGE_TAG) --build-arg PY_VERSION=$(PY_VERSION) -f Dockerfile.$(LLDB_VERSION) .
 
 build-image-py35: PY_VERSION=3.5
 build-image-py35: build-image
@@ -21,7 +22,7 @@ test: build-image
 	docker run -t -i --rm \
 		--security-opt seccomp:unconfined --cap-add=SYS_PTRACE \
 		-e PYTHONHASHSEED=1 \
-		cpython-lldb:$(PY_VERSION) \
+		cpython-lldb:$(DOCKER_IMAGE_TAG) \
 		bash -c "cd /root/.lldb/cpython-lldb && poetry run pytest -vv tests/"
 
 test-py35: PY_VERSION=3.5
