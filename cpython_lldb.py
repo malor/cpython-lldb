@@ -1,3 +1,4 @@
+import argparse
 import io
 import locale
 import re
@@ -11,68 +12,12 @@ IS_PY3 = sys.version_info.major == 3
 ENCODING_RE = re.compile(r'^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)')
 
 
-class Direction(object):
-    DOWN = -1
-    UP = 1
+# Objects
 
-
-def write_string(result, string, end=u'\n', encoding=locale.getpreferredencoding()):
-    """Helper function for writing to SBCommandReturnObject that expects bytes on py2 and str on py3."""
-
-    if IS_PY3:
-        result.write(string + end)
-    else:
-        result.write((string + end).encode(encoding=encoding))
-
-
-def is_available(lldb_value):
-    """
-    Helper function to check if a variable is available and was not optimized out.
-    """
-    return lldb_value.error.Success()
-
-
-def source_file_encoding(filename):
-    """Determine the text encoding of a Python source file."""
-
-    with io.open(filename, 'rt', encoding='latin-1') as f:
-        # according to PEP-263 the magic comment must be placed on one of the first two lines
-        for _ in range(2):
-            line = f.readline()
-            match = re.match(ENCODING_RE, line)
-            if match:
-                return match.group(1)
-
-    # if not defined explicitly, assume it's UTF-8 (which is ASCII-compatible)
-    return 'utf-8'
-
-
-def source_file_lines(filename, start, end, encoding='utf-8'):
-    """Return the contents of [start; end) lines of the source file.
-
-    1 based indexing is used for convenience.
-    """
-
-    lines = []
-    with io.open(filename, 'rt', encoding=encoding) as f:
-        for (line_num, line) in enumerate(f, 1):
-            if start <= line_num < end:
-                lines.append(line)
-            elif line_num > end:
-                break
-
-    return lines
-
-
-class WrappedObject(object):
+class PyObject(object):
     def __init__(self, lldb_value):
         self.lldb_value = lldb_value
 
-    def child(self, name):
-        return self.lldb_value.GetChildMemberWithName(name)
-
-
-class PyObject(WrappedObject):
     def __repr__(self):
         return repr(self.value)
 
@@ -83,6 +28,9 @@ class PyObject(WrappedObject):
         assert isinstance(other, PyObject)
 
         return self.value == other.value
+
+    def child(self, name):
+        return self.lldb_value.GetChildMemberWithName(name)
 
     @classmethod
     def from_value(cls, v):
@@ -380,7 +328,10 @@ class PyDictObject(PyObject):
         return rv
 
 
-class PyCodeObject(WrappedObject):
+class PyCodeObject(PyObject):
+
+    typename = "code"
+
     def addr2line(self, address):
         """
         Translated pseudocode from ``Objects/lnotab_notes.txt``
@@ -403,7 +354,7 @@ class PyCodeObject(WrappedObject):
         return lineno
 
 
-class PyFrameObject(WrappedObject):
+class PyFrameObject(PyObject):
 
     typename = 'frame'
 
@@ -540,36 +491,74 @@ class PyFrameObject(WrappedObject):
         )
 
 
-def pretty_printer(value, internal_dict):
-    """Provide a type summary for a PyObject instance.
+# Commands
 
-    Try to identify an actual object type and provide a representation for its
-    value (similar to repr(something) in Python code).
+class Command(object):
+    """Base class for py-* command implementations.
 
+    Subclasses are required to override the following attributes/methods:
+
+    * `command` (str): command name
+    * `execute()` (method): method that will be called when the command is
+    invoked from the LLDB REPL
+
+    Overriding the `argument_parser` property allows for extending the default
+    ArgumentParser instance as needed.
     """
 
-    return repr(PyObject.from_value(value))
+    def __init__(self, debugger, unused):
+        # using this instance of Debugger crashes LLDB. But commands receive a
+        # working instance on every invokation, so we don't really need it
+        pass
+
+    def get_short_help(self):
+        return self.__doc__.splitlines()[0]
+
+    def get_long_help(self):
+        return self.__doc__
+
+    def __call__(self, debugger, command, exe_ctx, result):
+        try:
+            args = self.argument_parser.parse_args(shlex.split(command))
+            self.execute(debugger, args, result)
+        except Exception as e:
+            result.SetError(u'Failed to execute command `{}`: {}'.format(self.command, e))
+
+    @property
+    def argument_parser(self):
+        parser = argparse.ArgumentParser(prog=self.command,
+                                         description=self.get_long_help(),
+                                         formatter_class=argparse.RawDescriptionHelpFormatter)
+        return parser
+
+    def execute(self, debugger, args, result):
+        raise NotImplementedError
 
 
-def full_backtrace(debugger, command, result, internal_dict):
-    target = debugger.GetSelectedTarget()
-    thread = target.GetProcess().GetSelectedThread()
+class PyBt(Command):
+    """Print a Python-level call trace of the selected thread."""
 
-    pystack = PyFrameObject.get_pystack(thread)
+    command = 'py-bt'
 
-    lines = []
-    for pyframe in reversed(pystack):
-        lines.append(u'  ' + pyframe.to_pythonlike_string())
-        lines.append(u'    ' + pyframe.line.strip())
+    def execute(self, debugger, args, result):
+        target = debugger.GetSelectedTarget()
+        thread = target.GetProcess().GetSelectedThread()
 
-    if lines:
-        write_string(result, u'Traceback (most recent call last):')
-        write_string(result, u'\n'.join(lines))
-    else:
-        write_string(result, u'No Python traceback found (symbols might be missing)!')
+        pystack = PyFrameObject.get_pystack(thread)
+
+        lines = []
+        for pyframe in reversed(pystack):
+            lines.append(u'  ' + pyframe.to_pythonlike_string())
+            lines.append(u'    ' + pyframe.line.strip())
+
+        if lines:
+            write_string(result, u'Traceback (most recent call last):')
+            write_string(result, u'\n'.join(lines))
+        else:
+            write_string(result, u'No Python traceback found (symbols might be missing)!')
 
 
-def list_code(debugger, command, result, internal_dict):
+class PyList(Command):
     """List the source code of the Python module that is currently being executed.
 
     Use
@@ -594,51 +583,160 @@ def list_code(debugger, command, result, internal_dict):
     to list the source code within a specific range of lines.
     """
 
-    # optional arguments allow to list the source code within a specific range
-    # of lines instead of the context around the line that is being executed
-    args = shlex.split(command)
-    if len(args) > 2:
-        write_string(result, u'Usage: py-list [start [end]]')
-        return
-    elif len(args) == 2:
-        start = int(args[0])
-        end = int(args[1])
-    elif len(args) == 1:
-        start = int(args[0])
-        end = start + 10
-    else:
-        start = None
-        end = None
+    command = 'py-list'
 
-    # find the most recent Python frame in the callstack of the selected thread
-    current_frame = select_closest_python_frame(debugger)
-    if current_frame is None:
-        write_string(result, u'<source code is not available>')
-        return
+    @property
+    def argument_parser(self):
+        parser = super(PyList, self).argument_parser
 
-    # determine the location of the module and the exact line that is currently
-    # being executed
-    filename = current_frame.filename
-    current_line_num = current_frame.line_number
+        parser.add_argument('linenum', nargs='*', type=int, default=[0, 0])
 
-    # default to showing the context around the current line, unless overriden
-    # by optional arguments
-    start = start or max(current_line_num - 5, 1)
-    end = end or (current_line_num + 5)
+        return parser
 
-    try:
-        encoding = source_file_encoding(filename)
-        lines = source_file_lines(filename, start, end + 1, encoding=encoding)
-        for (i, line) in enumerate(lines, start):
-            # highlight the current line
-            if i == current_line_num:
-                prefix = u'>{}'.format(i)
+    @staticmethod
+    def linenum_range(current_line_num, specified_range):
+        if len(specified_range) == 2:
+            start, end = specified_range
+        elif len(specified_range) == 1:
+            start = specified_range[0]
+            end = start + 10
+        else:
+            start = None
+            end = None
+
+        start = start or max(current_line_num - 5, 1)
+        end = end or (current_line_num + 5)
+
+        return start, end
+
+    def execute(self, debugger, args, result):
+        # optional arguments allow to list the source code within a specific range
+        # of lines instead of the context around the line that is being executed
+        linenum_range = args.linenum
+        if len(linenum_range) > 2:
+            write_string(result, u'Usage: py-list [start [end]]')
+            return
+
+        # find the most recent Python frame in the callstack of the selected thread
+        current_frame = select_closest_python_frame(debugger)
+        if current_frame is None:
+            write_string(result, u'<source code is not available>')
+            return
+
+        # determine the location of the module and the exact line that is currently
+        # being executed
+        filename = current_frame.filename
+        current_line_num = current_frame.line_number
+
+        # default to showing the context around the current line, unless overriden
+        start, end = PyList.linenum_range(current_line_num, linenum_range)
+        try:
+            encoding = source_file_encoding(filename)
+            lines = source_file_lines(filename, start, end + 1, encoding=encoding)
+            for (i, line) in enumerate(lines, start):
+                # highlight the current line
+                if i == current_line_num:
+                    prefix = u'>{}'.format(i)
+                else:
+                    prefix = u'{}'.format(i)
+
+                write_string(result, u'{:>5}    {}'.format(prefix, line.rstrip()))
+        except IOError:
+            write_string(result, u'<source code is not available>')
+
+
+class PyUp(Command):
+    """Select an older Python stack frame."""
+
+    command = 'py-up'
+
+    def execute(self, debugger, args, result):
+        select_closest_python_frame(debugger, direction=Direction.UP)
+
+        new_frame = move_python_frame(debugger, direction=Direction.UP)
+        if new_frame is None:
+            write_string(result, u'*** Oldest frame')
+        else:
+            print_frame_summary(result, new_frame)
+
+
+class PyDown(Command):
+    """Select a newer Python stack frame."""
+
+    command = 'py-down'
+
+    def execute(self, debugger, args, result):
+        select_closest_python_frame(debugger, direction=Direction.DOWN)
+
+        new_frame = move_python_frame(debugger, direction=Direction.DOWN)
+        if new_frame is None:
+            write_string(result, u'*** Newest frame')
+        else:
+            print_frame_summary(result, new_frame)
+
+
+class PyLocals(Command):
+    """Print the values of local variables in the selected Python frame."""
+
+    command = 'py-locals'
+
+    def execute(self, debugger, args, result):
+        current_frame = select_closest_python_frame(debugger, direction=Direction.UP)
+        if current_frame is None:
+            write_string(result, u'No locals found (symbols might be missing!)')
+            return
+
+        # merge logic is based on the implementation of PyFrame_LocalsToFast()
+        merged_locals = {}
+
+        # f_locals contains top-level declarations (e.g. functions or classes)
+        # of a frame executing a Python module, rather than a function
+        f_locals = current_frame.child('f_locals')
+        if f_locals.unsigned != 0:
+            for (k, v) in PyDictObject(f_locals).value.items():
+                merged_locals[k.value] = v
+
+        # f_localsplus stores local variables and arguments of function frames
+        fast_locals = current_frame.child('f_localsplus')
+        f_code = PyCodeObject(current_frame.child('f_code'))
+        varnames = PyTupleObject(f_code.child('co_varnames'))
+        for (i, name) in enumerate(varnames.value):
+            value = fast_locals.GetChildAtIndex(i, 0, True)
+            if value.unsigned != 0:
+                merged_locals[name.value] = PyObject.from_value(value).value
             else:
-                prefix = u'{}'.format(i)
+                merged_locals.pop(name, None)
 
-            write_string(result, u'{:>5}    {}'.format(prefix, line.rstrip()))
-    except IOError:
-        write_string(result, u'<source code is not available>')
+        for name in sorted(merged_locals.keys()):
+            write_string(result, u'{} = {}'.format(name, repr(merged_locals[name])))
+
+
+# Helpers
+
+class Direction(object):
+    DOWN = -1
+    UP = 1
+
+
+def print_frame_summary(result, frame):
+    """Print a short summary of a given Python frame: module and the line being executed."""
+
+    write_string(result, u'  ' + frame.to_pythonlike_string())
+    write_string(result, u'    ' + frame.line.strip())
+
+
+def select_closest_python_frame(debugger, direction=Direction.UP):
+    """Select and return the closest Python frame (or do nothing if the current frame is a Python frame)."""
+
+    target = debugger.GetSelectedTarget()
+    thread = target.GetProcess().GetSelectedThread()
+    frame = thread.GetSelectedFrame()
+
+    python_frame = PyFrameObject.from_frame(frame)
+    if python_frame is None:
+        return move_python_frame(debugger, direction)
+
+    return python_frame
 
 
 def move_python_frame(debugger, direction):
@@ -660,100 +758,77 @@ def move_python_frame(debugger, direction):
             return python_frame
 
 
-def select_closest_python_frame(debugger, direction=Direction.UP):
-    """Select and return the closest Python frame (or do nothing if the current frame is a Python frame)."""
+def write_string(result, string, end=u'\n', encoding=locale.getpreferredencoding()):
+    """Helper function for writing to SBCommandReturnObject that expects bytes on py2 and str on py3."""
 
-    target = debugger.GetSelectedTarget()
-    thread = target.GetProcess().GetSelectedThread()
-    frame = thread.GetSelectedFrame()
-
-    python_frame = PyFrameObject.from_frame(frame)
-    if python_frame is None:
-        return move_python_frame(debugger, direction)
-
-    return python_frame
-
-
-def print_frame_summary(result, frame):
-    """Print a short summary of a given Python frame: module and the line being executed."""
-
-    write_string(result, u'  ' + frame.to_pythonlike_string())
-    write_string(result, u'    ' + frame.line.strip())
-
-
-def stack_up(debugger, command, result, internal_dict):
-    """Select an older Python stack frame."""
-
-    select_closest_python_frame(debugger, direction=Direction.UP)
-
-    new_frame = move_python_frame(debugger, direction=Direction.UP)
-    if new_frame is None:
-        write_string(result, u'*** Oldest frame')
+    if IS_PY3:
+        result.write(string + end)
     else:
-        print_frame_summary(result, new_frame)
+        result.write((string + end).encode(encoding=encoding))
 
 
-def stack_down(debugger, command, result, internal_dict):
-    """Select a newer Python stack frame."""
-
-    select_closest_python_frame(debugger, direction=Direction.DOWN)
-
-    new_frame = move_python_frame(debugger, direction=Direction.DOWN)
-    if new_frame is None:
-        write_string(result, u'*** Newest frame')
-    else:
-        print_frame_summary(result, new_frame)
+def is_available(lldb_value):
+    """
+    Helper function to check if a variable is available and was not optimized out.
+    """
+    return lldb_value.error.Success()
 
 
-def print_locals(debugger, command, result, internal_dict):
-    """Print the values of local variables in the selected Python frame."""
+def source_file_encoding(filename):
+    """Determine the text encoding of a Python source file."""
 
-    current_frame = select_closest_python_frame(debugger, direction=Direction.UP)
-    if current_frame is None:
-        write_string(result, u'No locals found (symbols might be missing!)')
-        return
+    with io.open(filename, 'rt', encoding='latin-1') as f:
+        # according to PEP-263 the magic comment must be placed on one of the first two lines
+        for _ in range(2):
+            line = f.readline()
+            match = re.match(ENCODING_RE, line)
+            if match:
+                return match.group(1)
 
-    # merge logic is based on the implementation of PyFrame_LocalsToFast()
-    merged_locals = {}
+    # if not defined explicitly, assume it's UTF-8 (which is ASCII-compatible)
+    return 'utf-8'
 
-    # f_locals contains top-level declarations (e.g. functions or classes)
-    # of a frame executing a Python module, rather than a function
-    f_locals = current_frame.child('f_locals')
-    if f_locals.unsigned != 0:
-        for (k, v) in PyDictObject(f_locals).value.items():
-            merged_locals[k.value] = v
 
-    # f_localsplus stores local variables and arguments of function frames
-    fast_locals = current_frame.child('f_localsplus')
-    f_code = PyCodeObject(current_frame.child('f_code'))
-    varnames = PyTupleObject(f_code.child('co_varnames'))
-    for (i, name) in enumerate(varnames.value):
-        value = fast_locals.GetChildAtIndex(i, 0, True)
-        if value.unsigned != 0:
-            merged_locals[name.value] = PyObject.from_value(value).value
-        else:
-            merged_locals.pop(name, None)
+def source_file_lines(filename, start, end, encoding='utf-8'):
+    """Return the contents of [start; end) lines of the source file.
 
-    for name in sorted(merged_locals.keys()):
-        write_string(result, u'{} = {}'.format(name, repr(merged_locals[name])))
+    1 based indexing is used for convenience.
+    """
+
+    lines = []
+    with io.open(filename, 'rt', encoding=encoding) as f:
+        for (line_num, line) in enumerate(f, 1):
+            if start <= line_num < end:
+                lines.append(line)
+            elif line_num > end:
+                break
+
+    return lines
+
+
+def register_commands(debugger):
+    for cls in Command.__subclasses__():
+        debugger.HandleCommand(
+            'command script add -c cpython_lldb.{cls} {command}'.format(
+                cls=cls.__name__,
+                command=cls.command,
+            )
+        )
+
+
+def pretty_printer(value, internal_dict):
+    """Provide a type summary for a PyObject instance.
+
+    Try to identify an actual object type and provide a representation for its
+    value (similar to repr(something) in Python code).
+
+    """
+
+    return repr(PyObject.from_value(value))
 
 
 def __lldb_init_module(debugger, internal_dict):
     debugger.HandleCommand(
         'type summary add -F cpython_lldb.pretty_printer PyObject'
     )
-    debugger.HandleCommand(
-        'command script add -f cpython_lldb.full_backtrace py-bt'
-    )
-    debugger.HandleCommand(
-        'command script add -f cpython_lldb.list_code py-list'
-    )
-    debugger.HandleCommand(
-        'command script add -f cpython_lldb.stack_up py-up'
-    )
-    debugger.HandleCommand(
-        'command script add -f cpython_lldb.stack_down py-down'
-    )
-    debugger.HandleCommand(
-        'command script add -f cpython_lldb.print_locals py-locals'
-    )
+    register_commands(debugger)
