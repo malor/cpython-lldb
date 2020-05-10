@@ -186,14 +186,17 @@ class PyUnicodeObject(PyObject):
             addr = int(value.location, 16) + value.size
 
             rv = self.process.ReadMemory(addr, length * kind, lldb.SBError())
-            if kind == self.U_2BYTE_KIND:
+            if kind == self.U_1BYTE_KIND:
+                return rv.decode('latin-1')
+            elif kind == self.U_2BYTE_KIND:
                 return rv.decode('utf-16')
             elif kind == self.U_4BYTE_KIND:
                 return rv.decode('utf-32')
             else:
-                return u''  # FIXME
+                raise ValueError('Unsupported PyUnicodeObject kind: {}'.format(kind))
         else:
-            return u''
+            # TODO: add support for legacy unicode strings
+            raise ValueError('Unsupported PyUnicodeObject kind: {}'.format(kind))
 
 
 class PyNoneObject(PyObject):
