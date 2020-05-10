@@ -1,8 +1,8 @@
-dist: trusty
-sudo: required
+os: linux
+dist: bionic
 language: python
 
-matrix:
+jobs:
   include:
     - name: "Python 3.5 @ LLDB 7"
       env: PY_VERSION=py35 LLDB_VERSION=lldb7
