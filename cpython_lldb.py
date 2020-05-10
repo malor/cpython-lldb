@@ -389,20 +389,12 @@ class PyFrameObject(PyObject):
         frame with a parent, that we have not seen yet.
         """
 
-        # TODO: this is specific to x86-64 at the moment; try to generalize this later
-        REGISTERS = (
-            'rax', 'rbx', 'rcx', 'rdx',
-            'rsp', 'rbp', 'rdi', 'rsi',
-            'r8', 'r9', 'r10', 'r11',
-            'r12', 'r13', 'r14', 'r15',
-        )
-
         target = frame.GetThread().GetProcess().GetTarget()
         object_type = target.FindFirstType('PyObject')
         frame_type = target.FindFirstType('PyFrameObject')
 
         found_frames = []
-        for register in REGISTERS:
+        for register in general_purpose_registers(frame):
             sbvalue = frame.register[register]
 
             # ignore unavailable registers or null pointers
@@ -804,6 +796,19 @@ def source_file_lines(filename, start, end, encoding='utf-8'):
                 break
 
     return lines
+
+
+def general_purpose_registers(frame):
+    """Return a list of general purpose register names."""
+
+    REGISTER_CLASS = 'General Purpose Registers'
+
+    try:
+        gpr = next(reg_class for reg_class in frame.registers
+                   if reg_class.name == REGISTER_CLASS)
+        return [reg.name for reg in gpr.children]
+    except StopIteration:
+        return []
 
 
 def register_commands(debugger):
