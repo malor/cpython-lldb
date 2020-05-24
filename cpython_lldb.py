@@ -42,13 +42,14 @@ class PyObject(object):
     def typename_of(v):
         try:
             addr = v.GetValueForExpressionPath('->ob_type->tp_name').unsigned
-            process = v.GetProcess()
-            tp_name = process.ReadCStringFromMemory(addr, 256, lldb.SBError())
+            if not addr:
+                return
 
-            return tp_name
-        except UnicodeDecodeError:
+            process = v.GetProcess()
+            return process.ReadCStringFromMemory(addr, 256, lldb.SBError())
+        except Exception:
             # if we fail to read tp_name, then it's likely not a PyObject
-            return u'unknown'
+            pass
 
     @property
     def typename(self):
