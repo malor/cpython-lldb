@@ -12,6 +12,8 @@ jobs:
       env: PY_VERSION=py37 LLDB_VERSION=lldb7
     - name: "Python 3.8 @ LLDB 7"
       env: PY_VERSION=py38 LLDB_VERSION=lldb7
+    - name: "Python 3.9 @ LLDB 7"
+      env: PY_VERSION=py39 LLDB_VERSION=lldb7
 
     - name: "Python 3.5 @ LLDB 9"
       env: PY_VERSION=py35 LLDB_VERSION=lldb9
@@ -21,6 +23,8 @@ jobs:
       env: PY_VERSION=py37 LLDB_VERSION=lldb9
     - name: "Python 3.8 @ LLDB 9"
       env: PY_VERSION=py38 LLDB_VERSION=lldb9
+    - name: "Python 3.9 @ LLDB 9"
+      env: PY_VERSION=py39 LLDB_VERSION=lldb9
 
     - name: "Python 3.5 @ LLDB 10"
       env: PY_VERSION=py35 LLDB_VERSION=lldb10
@@ -30,6 +34,8 @@ jobs:
       env: PY_VERSION=py37 LLDB_VERSION=lldb10
     - name: "Python 3.8 @ LLDB 10"
       env: PY_VERSION=py38 LLDB_VERSION=lldb10
+    - name: "Python 3.9 @ LLDB 10"
+      env: PY_VERSION=py39 LLDB_VERSION=lldb10
 
 services:
   - docker
