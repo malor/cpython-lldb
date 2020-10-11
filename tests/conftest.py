@@ -1,6 +1,7 @@
 import io
 import itertools
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -35,6 +36,12 @@ def extract_command_output(lldb_output, command):
     return u'\n'.join(list(wo_tail)[1:]) + '\n'
 
 
+def normalize_stacktrace(trace):
+    """Replace absolute paths in a stacktrace to make them consistent between runs."""
+
+    return re.sub('File "(.*)test.py"', 'File "test.py"', trace)
+
+
 def run_lldb(code, breakpoint, commands, no_symbols=False):
     commands = list(itertools.chain(*(('-o', command) for command in commands)))
 
@@ -58,7 +65,8 @@ def run_lldb(code, breakpoint, commands, no_symbols=False):
             '-o', 'quit'
         ]
 
-        return subprocess.check_output(args).decode('utf-8')
+        return normalize_stacktrace(
+            subprocess.check_output(args).decode('utf-8'))
     finally:
         os.chdir(old_cwd)
         shutil.rmtree(d, ignore_errors=True)

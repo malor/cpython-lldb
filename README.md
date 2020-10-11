@@ -295,6 +295,7 @@ Supported versions are:
 * `py36`
 * `py37`
 * `py38`
+* `py39`
 
 
 Contributors

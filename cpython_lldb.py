@@ -345,8 +345,8 @@ class PyCodeObject(PyObject):
 
         lineno = addr = 0
         for addr_incr, line_incr in zip(co_lnotab[::2], co_lnotab[1::2]):
-            addr_incr = ord(addr_incr) if isinstance(addr_incr, bytes) else addr_incr
-            line_incr = ord(line_incr) if isinstance(line_incr, bytes) else line_incr
+            addr_incr = ord(addr_incr) if isinstance(addr_incr, (bytes, str)) else addr_incr
+            line_incr = ord(line_incr) if isinstance(line_incr, (bytes, str)) else line_incr
 
             addr += addr_incr
             if addr > address:
@@ -395,7 +395,15 @@ class PyFrameObject(PyObject):
 
         target = frame.GetThread().GetProcess().GetTarget()
         object_type = target.FindFirstType('PyObject')
-        frame_type = target.FindFirstType('PyFrameObject')
+
+        # in CPython >= 3.9, PyFrameObject is an opaque type that does not
+        # expose its own structure. Unfortunately, we can't make any function
+        # calls here, so we resort to using the internal counterpart instead
+        public_frame_type = target.FindFirstType('PyFrameObject')
+        internal_frame_type = target.FindFirstType('_frame')
+        frame_type = (public_frame_type
+                      if public_frame_type.members
+                      else internal_frame_type)
 
         found_frames = []
         for register in general_purpose_registers(frame):
