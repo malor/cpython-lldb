@@ -37,6 +37,9 @@ jobs:
     - name: "Python 3.9 @ LLDB 10"
       env: PY_VERSION=py39 LLDB_VERSION=lldb10
 
+    - name: "Pre-release testing: Python 3.10 @ LLDB 11"
+      env: PY_VERSION=py310 LLDB_VERSION=lldb11
+
 services:
   - docker
 
