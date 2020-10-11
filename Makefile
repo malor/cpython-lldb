@@ -1,10 +1,13 @@
 PY_VERSION ?= latest
-LLDB_VERSION ?= lldb10
-DOCKER_IMAGE_TAG = $(PY_VERSION)-$(LLDB_VERSION)
+LLDB_VERSION ?= 10
+DOCKER_IMAGE_TAG = $(PY_VERSION)-lldb$(LLDB_VERSION)
 
 build-image:
-	docker build -t cpython-lldb:$(PY_VERSION) --build-arg PY_VERSION=$(PY_VERSION) -f Dockerfile.base .
-	docker build -t cpython-lldb:$(DOCKER_IMAGE_TAG) --build-arg PY_VERSION=$(PY_VERSION) -f Dockerfile.$(LLDB_VERSION) .
+	docker build \
+		-t cpython-lldb:$(DOCKER_IMAGE_TAG) \
+		--build-arg PY_VERSION=$(PY_VERSION) \
+		--build-arg LLDB_VERSION=$(LLDB_VERSION) \
+		-f Dockerfile .
 
 build-image-py35: PY_VERSION=3.5
 build-image-py35: build-image

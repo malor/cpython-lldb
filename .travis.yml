@@ -5,40 +5,40 @@ language: python
 jobs:
   include:
     - name: "Python 3.5 @ LLDB 7"
-      env: PY_VERSION=py35 LLDB_VERSION=lldb7
+      env: PY_VERSION=py35 LLDB_VERSION=7
     - name: "Python 3.6 @ LLDB 7"
-      env: PY_VERSION=py36 LLDB_VERSION=lldb7
+      env: PY_VERSION=py36 LLDB_VERSION=7
     - name: "Python 3.7 @ LLDB 7"
-      env: PY_VERSION=py37 LLDB_VERSION=lldb7
+      env: PY_VERSION=py37 LLDB_VERSION=7
     - name: "Python 3.8 @ LLDB 7"
-      env: PY_VERSION=py38 LLDB_VERSION=lldb7
+      env: PY_VERSION=py38 LLDB_VERSION=7
     - name: "Python 3.9 @ LLDB 7"
-      env: PY_VERSION=py39 LLDB_VERSION=lldb7
+      env: PY_VERSION=py39 LLDB_VERSION=7
 
     - name: "Python 3.5 @ LLDB 9"
-      env: PY_VERSION=py35 LLDB_VERSION=lldb9
+      env: PY_VERSION=py35 LLDB_VERSION=9
     - name: "Python 3.6 @ LLDB 9"
-      env: PY_VERSION=py36 LLDB_VERSION=lldb9
+      env: PY_VERSION=py36 LLDB_VERSION=9
     - name: "Python 3.7 @ LLDB 9"
-      env: PY_VERSION=py37 LLDB_VERSION=lldb9
+      env: PY_VERSION=py37 LLDB_VERSION=9
     - name: "Python 3.8 @ LLDB 9"
-      env: PY_VERSION=py38 LLDB_VERSION=lldb9
+      env: PY_VERSION=py38 LLDB_VERSION=9
     - name: "Python 3.9 @ LLDB 9"
-      env: PY_VERSION=py39 LLDB_VERSION=lldb9
+      env: PY_VERSION=py39 LLDB_VERSION=9
 
     - name: "Python 3.5 @ LLDB 10"
-      env: PY_VERSION=py35 LLDB_VERSION=lldb10
+      env: PY_VERSION=py35 LLDB_VERSION=10
     - name: "Python 3.6 @ LLDB 10"
-      env: PY_VERSION=py36 LLDB_VERSION=lldb10
+      env: PY_VERSION=py36 LLDB_VERSION=10
     - name: "Python 3.7 @ LLDB 10"
-      env: PY_VERSION=py37 LLDB_VERSION=lldb10
+      env: PY_VERSION=py37 LLDB_VERSION=10
     - name: "Python 3.8 @ LLDB 10"
-      env: PY_VERSION=py38 LLDB_VERSION=lldb10
+      env: PY_VERSION=py38 LLDB_VERSION=10
     - name: "Python 3.9 @ LLDB 10"
-      env: PY_VERSION=py39 LLDB_VERSION=lldb10
+      env: PY_VERSION=py39 LLDB_VERSION=10
 
     - name: "Pre-release testing: Python 3.10 @ LLDB 11"
-      env: PY_VERSION=py310 LLDB_VERSION=lldb11
+      env: PY_VERSION=py310 LLDB_VERSION=11
 
 services:
   - docker
