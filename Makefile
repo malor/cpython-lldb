@@ -21,6 +21,9 @@ build-image-py38: build-image
 build-image-py39: PY_VERSION=3.9
 build-image-py39: build-image
 
+build-image-py310: PY_VERSION=3.10-rc
+build-image-py310: build-image
+
 
 test: build-image
 	docker run -t -i --rm \
@@ -43,3 +46,6 @@ test-py38: test
 
 test-py39: PY_VERSION=3.9
 test-py39: test
+
+test-py310: PY_VERSION=3.10-rc
+test-py310: test
