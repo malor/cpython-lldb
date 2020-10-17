@@ -37,6 +37,17 @@ jobs:
     - name: "Python 3.9 @ LLDB 10"
       env: PY_VERSION=py39 LLDB_VERSION=10
 
+    - name: "Python 3.5 @ LLDB 11"
+      env: PY_VERSION=py35 LLDB_VERSION=11
+    - name: "Python 3.6 @ LLDB 11"
+      env: PY_VERSION=py36 LLDB_VERSION=11
+    - name: "Python 3.7 @ LLDB 11"
+      env: PY_VERSION=py37 LLDB_VERSION=11
+    - name: "Python 3.8 @ LLDB 11"
+      env: PY_VERSION=py38 LLDB_VERSION=11
+    - name: "Python 3.9 @ LLDB 11"
+      env: PY_VERSION=py39 LLDB_VERSION=11
+
     - name: "Pre-release testing: Python 3.10 @ LLDB 11"
       env: PY_VERSION=py310 LLDB_VERSION=11
 
