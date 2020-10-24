@@ -1,3 +1,4 @@
+import abc
 import argparse
 import io
 import locale
@@ -6,6 +7,7 @@ import shlex
 import sys
 
 import lldb
+import six
 
 
 IS_PY3 = sys.version_info.major == 3
@@ -41,7 +43,9 @@ class PyObject(object):
     @staticmethod
     def typename_of(v):
         try:
-            addr = v.GetValueForExpressionPath('->ob_type->tp_name').unsigned
+            addr = v.GetChildMemberWithName('ob_type') \
+                    .GetChildMemberWithName('tp_name') \
+                    .unsigned
             if not addr:
                 return
 
@@ -95,7 +99,9 @@ class PyLongObject(PyObject):
 
         shift = 15 if digit_type.size == 2 else 30
         value = self.lldb_value.deref.Cast(long_type)
-        size = value.GetValueForExpressionPath('.ob_base.ob_size').signed
+        size = value.GetChildMemberWithName('ob_base') \
+                    .GetChildMemberWithName('ob_size') \
+                    .signed
         if not size:
             return 0
 
@@ -142,8 +148,10 @@ class PyBytesObject(PyObject):
         bytes_type = self.target.FindFirstType('PyBytesObject')
 
         value = self.lldb_value.deref.Cast(bytes_type)
-        size = value.GetValueForExpressionPath('.ob_base.ob_size').unsigned
-        addr = value.GetValueForExpressionPath('.ob_sval').GetLoadAddress()
+        size = value.GetChildMemberWithName('ob_base') \
+                    .GetChildMemberWithName('ob_size') \
+                    .unsigned
+        addr = value.GetChildMemberWithName('ob_sval').GetLoadAddress()
 
         return bytes(self.process.ReadMemory(addr, size, lldb.SBError())) if size else b''
 
@@ -162,8 +170,13 @@ class PyUnicodeObject(PyObject):
         str_type = self.target.FindFirstType('PyUnicodeObject')
 
         value = self.lldb_value.deref.Cast(str_type)
-        state = value.GetValueForExpressionPath('._base._base.state')
-        length = value.GetValueForExpressionPath('._base._base.length').unsigned
+        state = value.GetChildMemberWithName('_base') \
+                     .GetChildMemberWithName('_base') \
+                     .GetChildMemberWithName('state')
+        length = value.GetChildMemberWithName('_base') \
+                      .GetChildMemberWithName('_base') \
+                      .GetChildMemberWithName('length') \
+                      .unsigned
         if not length:
             return u''
 
@@ -211,7 +224,9 @@ class _PySequence(object):
     @property
     def value(self):
         value = self.lldb_value.deref.Cast(self.lldb_type)
-        size = value.GetValueForExpressionPath('.ob_base.ob_size').signed
+        size = value.GetChildMemberWithName('ob_base') \
+                    .GetChildMemberWithName('ob_size') \
+                    .signed
         items = value.GetChildMemberWithName('ob_item')
 
         return self.python_type(
@@ -497,17 +512,15 @@ class PyFrameObject(PyObject):
 
 # Commands
 
+@six.add_metaclass(abc.ABCMeta)
 class Command(object):
     """Base class for py-* command implementations.
 
-    Subclasses are required to override the following attributes/methods:
+    Takes care of commands registration and error handling.
 
-    * `command` (str): command name
-    * `execute()` (method): method that will be called when the command is
-    invoked from the LLDB REPL
-
-    Overriding the `argument_parser` property allows for extending the default
-    ArgumentParser instance as needed.
+    Subclasses' docstrings are used as help messages for the commands. The
+    first line of a docstring act as a command description that appears ina
+    the output of `help`.
     """
 
     def __init__(self, debugger, unused):
@@ -530,13 +543,46 @@ class Command(object):
 
     @property
     def argument_parser(self):
-        parser = argparse.ArgumentParser(prog=self.command,
-                                         description=self.get_long_help(),
-                                         formatter_class=argparse.RawDescriptionHelpFormatter)
-        return parser
+        """ArgumentParser instance used for this command.
 
+        The default parser does not have any arguments and only prints a help
+        message based on the command description.
+
+        Subclasses are expected to override this property in order to add
+        additional commands to the provided ArgumentParser instance.
+        """
+
+        return argparse.ArgumentParser(
+            prog=self.command,
+            description=self.get_long_help(),
+            formatter_class=argparse.RawDescriptionHelpFormatter
+        )
+
+    @abc.abstractproperty
+    def command(self):
+        """Command name.
+
+        This name will be used by LLDB in order to uniquely identify an
+        implementation that should be executed when a command is run
+        in the REPL.
+        """
+
+    @abc.abstractmethod
     def execute(self, debugger, args, result):
-        raise NotImplementedError
+        """Implementation of the command.
+
+        Subclasses override this method to implement the logic of a given
+        command, e.g. printing a stacktrace. The command output should be
+        communicated back via the provided result object, so that it's
+        properly routed to LLDB frontend. Any unhandled exception will be
+        automatically transformed into proper errors.
+
+        Args:
+            debugger: lldb.SBDebugger: the primary interface to LLDB scripting
+            args: argparse.Namespace: an object holding parsed command arguments
+            result: lldb.SBCommandReturnObject: a container which holds the
+                    result from command execution
+        """
 
 
 class PyBt(Command):
@@ -837,8 +883,7 @@ def pretty_printer(value, internal_dict):
     """Provide a type summary for a PyObject instance.
 
     Try to identify an actual object type and provide a representation for its
-    value (similar to repr(something) in Python code).
-
+    value (similar to `repr(something)` in Python).
     """
 
     return repr(PyObject.from_value(value))
