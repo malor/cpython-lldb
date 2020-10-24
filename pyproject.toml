@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cpython-lldb"
-version = "0.0.1"
+version = "0.1.0"
 description = "LLDB script for debugging of CPython processes"
 license = "MIT"
 
@@ -16,6 +16,7 @@ keywords = ["debugging", "lldb", "cpython"]
 
 [tool.poetry.dependencies]
 python = "~2.7 || ^3.5"
+six = "^1.0.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^4.4.0"

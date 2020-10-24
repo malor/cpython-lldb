@@ -15,8 +15,6 @@ RUN if [ "${LLDB_VERSION}" = "9" ]; then \
     if [ "${LLDB_VERSION}" != "7" ]; then \
         # In newer versions support for Python scripting is provided via a separate package
         apt-get install -y python3-lldb-${LLDB_VERSION}; \
-        # cpython_lldb is not using six, but it's required for lldb.py
-        python -m pip install --target=/usr/lib/llvm-${LLDB_VERSION}/lib/python3/dist-packages six; \
     fi
 
 ENV PYTHONPATH /usr/lib/llvm-${LLDB_VERSION}/lib/python3/dist-packages
@@ -25,8 +23,9 @@ COPY . /root/.lldb/cpython-lldb
 RUN cd /root/.lldb/cpython-lldb && \
     python -m pip install "poetry>=0.12,<0.13" && \
     poetry install && poetry build -n -f wheel && \
-    python -m pip install dist/*.whl && rm -rf dist && \
-    echo "command script import cpython_lldb" >> /root/.lldbinit && \
+    mkdir -p ~/.lldb/cpython_lldb/site-packages && \
+    python -m pip install --target ~/.lldb/cpython_lldb/site-packages dist/*.whl && rm -rf dist && \
+    echo "command script import ~/.lldb/cpython_lldb/site-packages/cpython_lldb.py" >> /root/.lldbinit && \
     chmod +x /root/.lldbinit
 
 CMD ["/usr/bin/lldb"]

@@ -1,29 +1,43 @@
-What is cpython-lldb?
-=====================
+Overview
+========
 
 [![Build Status](https://travis-ci.org/malor/cpython-lldb.svg?branch=master)](https://travis-ci.org/malor/cpython-lldb)
 
-`cpython_lldb` is an extension for LLDB for debugging of Python applications
-running on CPython, that allows to get meaningful application-level information
-(e.g. variable values or stack traces).
+`cpython_lldb` is an LLDB extension for debugging Python programs.
+
+It may be useful for troubleshooting stuck threads and crashes in the interpreter,
+or external libraries. Unlike most Python debuggers, LLDB allows you to attach to
+a running process w/o instrumenting it in advance, or load a coredump and do a
+post-mortem analysis of a problem.
+
+When analyzing the state of a Python process, normally you would only have
+access to the *intepreter-level* information: every variable would be of type
+PyObject\*, and stack traces would only contain CPython internal calls and
+calls to external libraries. Unless you are a CPython developer troubleshooting
+some bug in the implementation of the interpreter, that is typically not
+very useful. This extension, however, allows you to extract the *application-level*
+information about execution of a program: print the values of variables,
+list the source code, display Python stack traces, etc.
 
 While CPython itself provides a similar extension for gdb [out of the box](
 https://github.com/python/cpython/blob/master/Tools/gdb/libpython.py),
 one might still prefer to use LLDB as a debugger, e.g. on Mac OS.
 
-**NOTE**: The project is still in early development stage; its functionality is very limited at this point.
+`cpython_lldb` requires CPython to be built with debugging symbols, which is
+not the case for some Linux distros (most notably Arch Linux). CPython official
+[Docker images](https://hub.docker.com/_/python) are known to work correctly,
+as they are used for integration testing.
 
 
 Features
 ========
 
-`cpython_lldb` currently targets (== is tested on) CPython 3.5+ and supports
- the following features:
+`cpython_lldb` targets CPython 3.5+ and supports the following features:
 
 * pretty-priting of built-in types (int, bool, float, bytes, str, none, tuple, list, set, dict)
 * printing of Python-level stack traces
 * printing of local variables
-* listing of the source code
+* listing the source code
 * walking up and down the Python call stack
 
 TODO:
@@ -34,11 +48,24 @@ TODO:
 Installation
 ============
 
+If your version of LLDB is linked against system libpython, it's recommended
+that you install the extension to the user site packages directory and allow
+it to be loaded automatically on start of a new LLDB session:
+
 ```shell
-mkdir -p ~/.lldb
-cd ~/.lldb && git clone https://github.com/malor/cpython-lldb
-echo "command script import ~/.lldb/cpython-lldb/cpython_lldb.py" >> ~/.lldbinit
-chmod +x ~/.lldbinit
+$ python -m pip install --user cpython_lldb
+$ echo "command script import cpython_lldb" >> ~/.lldbinit
+$ chmod +x ~/.lldbinit
+```
+
+Alternatively, you can install the extension to some other location on disk
+and tell LLDB to load it from there, e.g. ~/.lldb:
+
+```shell
+$ mkdir -p ~/.lldb/cpython_lldb
+$ python -m pip install --target ~/.lldb/cpython_lldb cpython_lldb
+$ echo "command script import ~/.lldb/cpythob_lldb/cpython_lldb.py" >> ~/.lldbinit
+$ chmod +x ~/.lldbinit
 ```
 
 Usage
@@ -56,11 +83,26 @@ or attach to an existing CPython process:
 $ lldb /usr/bin/python -p $PID
 ```
 
+If you've followed the installation steps, the extension will now be automatically
+loaded on start of a new LLDB session and register some Python-specific commands:
+
+```
+(lldb) help
+...
+Current user-defined commands:
+  py-bt     -- Print a Python-level call trace of the selected thread.
+  py-down   -- Select a newer Python stack frame.
+  py-list   -- List the source code of the Python module that is currently being executed.
+  py-locals -- Print the values of local variables in the selected Python frame.
+  py-up     -- Select an older Python stack frame.
+For more information on any command, type 'help <command-name>'.
+```
+
 Pretty-printing
 ---------------
 
 All known `PyObject`'s (i.e. built-in types) are automatically pretty-printed
-when encountered, as if you tried to get `repr()` of something in Python REPL,
+when encountered, as if you tried to get a `repr()` of something in Python REPL,
 e.g.:
 
 ```
@@ -73,7 +115,7 @@ e.g.:
 Stack traces
 ------------
 
-Use `py-bt` to print a full Python-level stack trace of the current thread, e.g.:
+Use `py-bt` to print a full application-level stack trace of the current thread, e.g.:
 
 ```
 (lldb) py-bt
@@ -128,8 +170,8 @@ kwargs = {u'foo': 'spam'}
 spam = u'foobar'
 ```
 
-Listing of the source code
---------------------------
+Listing the source code
+-----------------------
 
 Use `py-list` to list the source code that is currently being executed in the selected
 Python frame, e.g.:
@@ -186,7 +228,7 @@ Potential issues and how to solve them
 CPython 2.7.x
 -------------
 
-CPython 2.7.x is not supported yet, but may be in the future.
+CPython 2.7.x is not supported. There are currently no plans to support it in the future.
 
 Missing debugging symbols
 -------------------------
@@ -216,9 +258,12 @@ on CentOS / Fedora / RHEL do:
 $ sudo yum install python-debuginfo
 ```
 
-Other distros like Arch Linux do not provide debugging symbols in the package repos. In this case
+Other distros, like Arch Linux, do not provide debugging symbols in the package repos. In this case,
 you would need to build CPython from source. Please refer to official [CPython](https://devguide.python.org/setup/#compiling)
 or [distro](https://wiki.archlinux.org/index.php/Debug_-_Getting_Traces) docs for instructions.
+
+Alternatively, you can use official CPython [Docker images](https://hub.docker.com/_/python).
+
 
 Broken LLDB scripting
 ---------------------
