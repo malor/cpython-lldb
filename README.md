@@ -53,7 +53,7 @@ that you install the extension to the user site packages directory and allow
 it to be loaded automatically on start of a new LLDB session:
 
 ```shell
-$ python -m pip install --user cpython_lldb
+$ python -m pip install --user cpython-lldb
 $ echo "command script import cpython_lldb" >> ~/.lldbinit
 $ chmod +x ~/.lldbinit
 ```
@@ -63,7 +63,7 @@ and tell LLDB to load it from there, e.g. ~/.lldb:
 
 ```shell
 $ mkdir -p ~/.lldb/cpython_lldb
-$ python -m pip install --target ~/.lldb/cpython_lldb cpython_lldb
+$ python -m pip install --target ~/.lldb/cpython_lldb cpython-lldb
 $ echo "command script import ~/.lldb/cpythob_lldb/cpython_lldb.py" >> ~/.lldbinit
 $ chmod +x ~/.lldbinit
 ```
