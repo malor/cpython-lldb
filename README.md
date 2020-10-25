@@ -34,7 +34,7 @@ Features
 
 `cpython_lldb` targets CPython 3.5+ and supports the following features:
 
-* pretty-priting of built-in types (int, bool, float, bytes, str, none, tuple, list, set, dict)
+* pretty-priting of built-in types (int, bool, float, bytes, str, none, tuple, list, set, frozenset, dict)
 * printing of Python-level stack traces
 * printing of local variables
 * listing the source code

@@ -49,7 +49,7 @@ def assert_lldb_repr(value, expected, code_value=None):
     match = lldb_repr_from_frame(value_repr) or lldb_repr_from_register(value_repr)
     assert match is not None
 
-    if isinstance(value, (set, dict)):
+    if isinstance(value, (set, frozenset, dict)):
         # sets and dicts can have different order of keys depending on
         # CPython version, so we evaluate the representation and compare
         # it to the expected value
@@ -124,6 +124,14 @@ def test_set():
                      r'set\(\[False, 1, 3.14159, None, u\'hello\'\]\)')
     assert_lldb_repr(set(range(16)),
                      r'set\(\[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15\]\)')
+
+def test_frozenset():
+    assert_lldb_repr(frozenset(), r'frozenset\(\)')
+    assert_lldb_repr(frozenset({1, 2, 3}), r'frozenset\(\{1, 2, 3\}\)')
+    assert_lldb_repr(frozenset({1, 3.14159, u'hello', False, None}),
+                     r'frozenset\(\[False, 1, 3.14159, None, u\'hello\'\]\)')
+    assert_lldb_repr(frozenset(range(16)),
+                     r'frozenset\(\{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15\}\)')
 
 def test_dict():
     assert_lldb_repr({}, '{}')
