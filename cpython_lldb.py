@@ -255,9 +255,7 @@ class PyTupleObject(_PySequence, PyObject):
         return self.target.FindFirstType('PyTupleObject')
 
 
-class PySetObject(PyObject):
-
-    typename = 'set'
+class _PySetObject(object):
 
     @property
     def value(self):
@@ -281,6 +279,20 @@ class PySetObject(PyObject):
                 rv.add(PyObject.from_value(key))
 
         return rv
+
+
+class PySetObject(_PySetObject, PyObject):
+
+    typename = 'set'
+
+
+class PyFrozenSetObject(_PySetObject, PyObject):
+
+    typename = 'frozenset'
+
+    @property
+    def value(self):
+        return frozenset(super(PyFrozenSetObject, self).value)
 
 
 class PyDictObject(PyObject):
