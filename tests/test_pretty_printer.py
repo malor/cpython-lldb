@@ -1,3 +1,4 @@
+import collections
 import re
 
 from .conftest import run_lldb
@@ -9,7 +10,7 @@ def lldb_repr_from_frame(value):
     # we are trying to scrape from the LLDB output. When the breakpoint is hit,
     # the argument value will be pretty-printed by `frame info` command
     response = run_lldb(
-        code='id(%s)' % value,
+        code='from collections import *; from six.moves import *; id(%s)' % value,
         breakpoint='builtin_id',
         commands=['frame info'],
     )
@@ -30,7 +31,7 @@ def lldb_repr_from_register(value):
     # here we use the fact that the value of `v` argument is passed in the
     # CPU register RSI according to the rules of AMD64 calling convention
     response = run_lldb(
-        code='id(%s)' % value,
+        code='from collections import *; from six.moves import *; id(%s)' % value,
         breakpoint='builtin_id',
         commands=['print (PyObject*) $rsi'],
     )
@@ -53,7 +54,11 @@ def assert_lldb_repr(value, expected, code_value=None):
         # sets and dicts can have different order of keys depending on
         # CPython version, so we evaluate the representation and compare
         # it to the expected value
-        assert value == eval(match.group(1), {}, {})
+        _globals = {
+            'Counter': collections.Counter,
+            'OrderedDict': collections.OrderedDict,
+        }
+        assert value == eval(match.group(1), _globals, {})
     else:
         # for other data types we can do an exact string match using
         # a regular expression (e.g. to account for optional 'u' and 'b'
@@ -140,6 +145,57 @@ def test_dict():
     assert_lldb_repr({i: i for i in range(16)},
                      ('{0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8,'
                       ' 9: 9, 10: 10, 11: 11, 12: 12, 13: 13, 14: 14, 15: 15}'))
+
+def test_defaultdict():
+    assert_lldb_repr(collections.defaultdict(int), '{}', 'defaultdict(int)')
+    assert_lldb_repr(collections.defaultdict(int, {1: 2, 3: 4}),
+                     '{1: 2, 3: 4}',
+                     'defaultdict(int, {1: 2, 3: 4})')
+    assert_lldb_repr(collections.defaultdict(int, {1: 2, 'a': 'b'}),
+                     "{1: 2, u'a': u'b'}",
+                     "defaultdict(int, {1: 2, 'a': 'b'})")
+    assert_lldb_repr(collections.defaultdict(int, {i: i for i in range(16)}),
+                     ('{0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8,'
+                      ' 9: 9, 10: 10, 11: 11, 12: 12, 13: 13, 14: 14, 15: 15}'),
+                     'defaultdict(int, {i: i for i in range(16)})')
+
+
+def test_ordered_dict():
+    assert_lldb_repr(collections.OrderedDict(), 'OrderedDict()')
+    assert_lldb_repr(collections.OrderedDict([(1, 2), (3, 4)]),
+                     'OrderedDict([(1, 2), (3, 4)])')
+    assert_lldb_repr(collections.OrderedDict([(1, 2), ('a', 'b')]),
+                     "OrderedDict([(1, 2), ('a', 'b')])")
+    assert_lldb_repr(collections.OrderedDict((i, i) for i in range(16)),
+                     ('OrderedDict([(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), '
+                      '(5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), '
+                      '(11, 11), (12, 12), (13, 13), (14, 14), (15, 15)])'))
+
+
+def test_userdict():
+    assert_lldb_repr(collections.UserDict(), '{}', 'UserDict()')
+    assert_lldb_repr(collections.UserDict({1: 2, 3: 4}),
+                     '{1: 2, 3: 4}',
+                     'UserDict({1: 2, 3: 4})')
+    assert_lldb_repr(collections.UserDict({1: 2, 'a': 'b'}),
+                     "{1: 2, u?'a': u?'b'}",
+                     "UserDict({1: 2, 'a': 'b'})")
+    assert_lldb_repr(collections.UserDict({i: i for i in range(16)}),
+                     ('{0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8,'
+                      ' 9: 9, 10: 10, 11: 11, 12: 12, 13: 13, 14: 14, 15: 15}'),
+                     'UserDict({i: i for i in range(16)})')
+
+
+def test_counter():
+    assert_lldb_repr(collections.Counter(), 'Counter()')
+    assert_lldb_repr(collections.Counter({1: 2, 3: 4}),
+                     'Counter({1: 2, 3: 4})')
+    assert_lldb_repr(collections.Counter({1: 2, 'a': 'b'}),
+                     "Counter({1: 2, u'a': u'b'})")
+    assert_lldb_repr(collections.Counter({i: i for i in range(16)}),
+                     ('Counter({0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, '
+                      '8: 8, 9: 9, 10: 10, 11: 11, 12: 12, 13: 13, 14: 14, 15: 15})'))
+
 
 def test_unsupported():
     assert_lldb_repr(object(), '(\'0x[0-9a-f]+\')|(\'No value\')', code_value='object()')

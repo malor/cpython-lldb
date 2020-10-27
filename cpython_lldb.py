@@ -1,5 +1,6 @@
 import abc
 import argparse
+import collections
 import io
 import locale
 import re
@@ -10,7 +11,6 @@ import lldb
 import six
 
 
-IS_PY3 = sys.version_info.major == 3
 ENCODING_RE = re.compile(r'^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)')
 
 
@@ -295,68 +295,131 @@ class PyFrozenSetObject(_PySetObject, PyObject):
         return frozenset(super(PyFrozenSetObject, self).value)
 
 
-class PyDictObject(PyObject):
-
-    typename = 'dict'
+class _PyDictObject(object):
 
     @property
     def value(self):
-        dict_type = self.target.FindFirstType('PyDictObject')
         byte_type = self.target.FindFirstType('char')
+        dict_type = self.target.FindFirstType('PyDictObject')
+        dictentry_type = self.target.FindFirstType('PyDictKeyEntry')
+        object_type = self.target.FindFirstType('PyObject')
 
         value = self.lldb_value.deref.Cast(dict_type)
-        keys = value.GetChildMemberWithName('ma_keys')
-        values = value.GetChildMemberWithName('ma_values')
 
-        rv = {}
+        ma_keys = value.GetChildMemberWithName('ma_keys')
+        table_size = ma_keys.GetChildMemberWithName('dk_size').unsigned
+        num_entries = ma_keys.GetChildMemberWithName('dk_nentries').unsigned
 
-        if values.unsigned == 0:
-            # table is "combined": keys and values are stored in ma_keys
-            dictentry_type = self.target.FindFirstType('PyDictKeyEntry')
-            table_size = keys.GetChildMemberWithName('dk_size').unsigned
-            num_entries = keys.GetChildMemberWithName('dk_nentries').unsigned
-
-            # hash table effectively stores indexes of entries in the key/value
-            # pairs array; the size of an index varies, so that all possible
-            # array positions can be addressed
-            if table_size < 0xff:
-                index_size = 1
-            elif table_size < 0xffff:
-                index_size = 2
-            elif table_size < 0xfffffff:
-                index_size = 4
-            else:
-                index_size = 8
-            shift = table_size * index_size
-
-            indices = keys.GetChildMemberWithName("dk_indices")
-            if indices.IsValid():
-                # CPython version >= 3.6
-                # entries are stored in an array right after the indexes table
-                entries = indices.Cast(byte_type.GetArrayType(shift)) \
-                                 .GetChildAtIndex(shift, 0, True) \
-                                 .AddressOf() \
-                                 .Cast(dictentry_type.GetPointerType()) \
-                                 .deref \
-                                 .Cast(dictentry_type.GetArrayType(num_entries))
-            else:
-                # CPython version < 3.6
-                num_entries = table_size
-                entries = keys.GetChildMemberWithName("dk_entries") \
-                              .Cast(dictentry_type.GetArrayType(num_entries))
-
-            for i in range(num_entries):
-                entry = entries.GetChildAtIndex(i)
-                k = entry.GetChildMemberWithName('me_key')
-                v = entry.GetChildMemberWithName('me_value')
-                if k.unsigned != 0 and v.unsigned != 0:
-                    rv[PyObject.from_value(k)] = PyObject.from_value(v)
+        # hash table effectively stores indexes of entries in the key/value
+        # pairs array; the size of an index varies, so that all possible
+        # array positions can be addressed
+        if table_size < 0xff:
+            index_size = 1
+        elif table_size < 0xffff:
+            index_size = 2
+        elif table_size < 0xfffffff:
+            index_size = 4
         else:
-            # keys and values are stored separately
-            # FIXME: implement this
-            pass
+            index_size = 8
+        shift = table_size * index_size
+
+        indices = ma_keys.GetChildMemberWithName("dk_indices")
+        if indices.IsValid():
+            # CPython version >= 3.6
+            # entries are stored in an array right after the indexes table
+            entries = indices.Cast(byte_type.GetArrayType(shift)) \
+                             .GetChildAtIndex(shift, 0, True) \
+                             .AddressOf() \
+                             .Cast(dictentry_type.GetPointerType()) \
+                             .deref \
+                             .Cast(dictentry_type.GetArrayType(num_entries))
+        else:
+            # CPython version < 3.6
+            num_entries = table_size
+            entries = ma_keys.GetChildMemberWithName("dk_entries") \
+                             .Cast(dictentry_type.GetArrayType(num_entries))
+
+        ma_values = value.GetChildMemberWithName('ma_values')
+        if ma_values.unsigned:
+            is_split = True
+            ma_values = ma_values.deref.Cast(object_type.GetPointerType().GetArrayType(num_entries))
+        else:
+            is_split = False
+
+        rv = self.python_type()
+        for i in range(num_entries):
+            entry = entries.GetChildAtIndex(i)
+            k = entry.GetChildMemberWithName('me_key')
+            v = entry.GetChildMemberWithName('me_value')
+            if k.unsigned != 0 and v.unsigned != 0:
+                # hash table is "combined"; keys and values are stored together
+                rv[PyObject.from_value(k)] = PyObject.from_value(v)
+            elif k.unsigned != 0 and is_split:
+                # hash table is "split"; values are stored separately
+                for j in range(i, table_size):
+                    v = ma_values.GetChildAtIndex(j)
+                    if v.unsigned != 0:
+                        rv[PyObject.from_value(k)] = PyObject.from_value(v)
+                        break
 
         return rv
+
+
+class PyDictObject(_PyDictObject, PyObject):
+
+    python_type = dict
+    typename = 'dict'
+
+
+class Counter(_PyDictObject, PyObject):
+
+    python_type = collections.Counter
+    typename = 'Counter'
+
+
+class OrderedDict(_PyDictObject, PyObject):
+
+    python_type = collections.OrderedDict
+    typename = 'collections.OrderedDict'
+
+
+class UserDict(_PyDictObject, PyObject):
+
+    python_type = six.moves.UserDict
+    typename = 'UserDict'
+
+    @property
+    def value(self):
+        dict_offset = self.lldb_value.GetChildMemberWithName('ob_type') \
+                                     .GetChildMemberWithName('tp_dictoffset') \
+                                     .unsigned
+
+        object_type = self.target.FindFirstType('PyObject')
+        address = lldb.SBAddress(int(self.lldb_value.value, 16) + dict_offset,
+                                 self.target)
+        value = self.target.CreateValueFromAddress('value', address,
+                                                   object_type.GetPointerType())
+
+        # UserDict is a class which has a single instance attribute "data"
+        return next(
+            v for k, v in PyDictObject(value).value.items()
+            if k.value == 'data'
+        )
+
+
+class Defaultdict(PyObject):
+
+    typename = 'collections.defaultdict'
+
+    @property
+    def value(self):
+        dict_type = self.target.FindFirstType('defdictobject')
+        value = self.lldb_value.deref.Cast(dict_type)
+        # for the time being, let's just convert it to a regular dict,
+        # as we can't properly display the repr of the default_factory
+        # anyway, because in order to do that we would need to execute
+        # code within the context of the inferior process
+        return PyDictObject(value.GetChildMemberWithName('dict').AddressOf()).value
 
 
 class PyCodeObject(PyObject):
@@ -823,7 +886,7 @@ def move_python_frame(debugger, direction):
 def write_string(result, string, end=u'\n', encoding=locale.getpreferredencoding()):
     """Helper function for writing to SBCommandReturnObject that expects bytes on py2 and str on py3."""
 
-    if IS_PY3:
+    if six.PY3:
         result.write(string + end)
     else:
         result.write((string + end).encode(encoding=encoding))
