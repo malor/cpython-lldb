@@ -5,7 +5,6 @@ import io
 import locale
 import re
 import shlex
-import sys
 
 import lldb
 import six
@@ -383,30 +382,6 @@ class OrderedDict(_PyDictObject, PyObject):
     typename = 'collections.OrderedDict'
 
 
-class UserDict(_PyDictObject, PyObject):
-
-    python_type = six.moves.UserDict
-    typename = 'UserDict'
-
-    @property
-    def value(self):
-        dict_offset = self.lldb_value.GetChildMemberWithName('ob_type') \
-                                     .GetChildMemberWithName('tp_dictoffset') \
-                                     .unsigned
-
-        object_type = self.target.FindFirstType('PyObject')
-        address = lldb.SBAddress(int(self.lldb_value.value, 16) + dict_offset,
-                                 self.target)
-        value = self.target.CreateValueFromAddress('value', address,
-                                                   object_type.GetPointerType())
-
-        # UserDict is a class which has a single instance attribute "data"
-        return next(
-            v for k, v in PyDictObject(value).value.items()
-            if k.value == 'data'
-        )
-
-
 class Defaultdict(PyObject):
 
     typename = 'collections.defaultdict'
@@ -420,6 +395,42 @@ class Defaultdict(PyObject):
         # anyway, because in order to do that we would need to execute
         # code within the context of the inferior process
         return PyDictObject(value.GetChildMemberWithName('dict').AddressOf()).value
+
+
+class _CollectionsUserObject(object):
+
+    @property
+    def value(self):
+        dict_offset = self.lldb_value.GetChildMemberWithName('ob_type') \
+                                     .GetChildMemberWithName('tp_dictoffset') \
+                                     .unsigned
+
+        object_type = self.target.FindFirstType('PyObject')
+        address = lldb.SBAddress(int(self.lldb_value.value, 16) + dict_offset,
+                                 self.target)
+        value = self.target.CreateValueFromAddress('value', address,
+                                                   object_type.GetPointerType())
+
+        # "data" is the real object used to store the contents of the class
+        return next(
+            v for k, v in PyDictObject(value).value.items()
+            if k.value == 'data'
+        )
+
+
+class UserDict(_CollectionsUserObject, PyObject):
+
+    typename = 'UserDict'
+
+
+class UserList(_CollectionsUserObject, PyObject):
+
+    typename = 'UserList'
+
+
+class UserString(_CollectionsUserObject, PyObject):
+
+    typename = 'UserString'
 
 
 class PyCodeObject(PyObject):
