@@ -186,6 +186,32 @@ def test_userdict():
                      'UserDict({i: i for i in range(16)})')
 
 
+def test_userstring():
+    assert_lldb_repr(collections.UserString(''), "u?''",
+                     'UserString("")')
+    assert_lldb_repr(collections.UserString('hello'), "u?'hello'",
+                     'UserString("hello")')
+    assert_lldb_repr(collections.UserString(u'привет'),
+                     "(u'\\\\u043f\\\\u0440\\\\u0438\\\\u0432\\\\u0435\\\\u0442')|('привет')",
+                     'UserString(u"привет")')
+    assert_lldb_repr(collections.UserString(u'𐅐𐅀𐅰'),
+                     "(u'\\\\U00010150\\\\U00010140\\\\U00010170')|('𐅐𐅀𐅰')",
+                     'UserString(u"𐅐𐅀𐅰")')
+    assert_lldb_repr(collections.UserString(u'æ'),
+                     "(u'\\\\xe6')|('æ')",
+                     'UserString(u"æ")')
+
+
+def test_userlist():
+    assert_lldb_repr(collections.UserList(), r'\[\]',
+                     'UserList()')
+    assert_lldb_repr(collections.UserList([1, 2, 3]), r'\[1, 2, 3\]',
+                     'UserList([1, 2, 3])')
+    assert_lldb_repr(collections.UserList([1, 3.14159, u'hello', False, None]),
+                     r'\[1, 3.14159, u?\'hello\', False, None\]',
+                     'UserList([1, 3.14159, u"hello", False, None])')
+
+
 def test_counter():
     assert_lldb_repr(collections.Counter(), 'Counter()')
     assert_lldb_repr(collections.Counter({1: 2, 3: 4}),
