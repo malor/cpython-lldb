@@ -70,10 +70,18 @@ class PyObject(object):
     def process(self):
         return self.lldb_value.GetProcess()
 
+    @property
+    def deref(self):
+        if self.lldb_value.TypeIsPointerType():
+            return self.lldb_value.deref
+        else:
+            return self.lldb_value
+
 
 class PyLongObject(PyObject):
 
     typename = 'int'
+    cpython_struct = 'PyLongObject'
 
     @property
     def value(self):
@@ -93,11 +101,11 @@ class PyLongObject(PyObject):
 
         '''
 
-        long_type = self.target.FindFirstType('PyLongObject')
+        long_type = self.target.FindFirstType(self.cpython_struct)
         digit_type = self.target.FindFirstType('digit')
 
         shift = 15 if digit_type.size == 2 else 30
-        value = self.lldb_value.deref.Cast(long_type)
+        value = self.deref.Cast(long_type)
         size = value.GetChildMemberWithName('ob_base') \
                     .GetChildMemberWithName('ob_size') \
                     .signed
@@ -120,7 +128,7 @@ class PyBoolObject(PyObject):
     def value(self):
         long_type = self.target.FindFirstType('PyLongObject')
 
-        value = self.lldb_value.deref.Cast(long_type)
+        value = self.deref.Cast(long_type)
         digits = value.GetChildMemberWithName('ob_digit')
         return bool(digits.GetChildAtIndex(0).unsigned)
 
@@ -128,12 +136,13 @@ class PyBoolObject(PyObject):
 class PyFloatObject(PyObject):
 
     typename = 'float'
+    cpython_struct = 'PyFloatObject'
 
     @property
     def value(self):
-        float_type = self.target.FindFirstType('PyFloatObject')
+        float_type = self.target.FindFirstType(self.cpython_struct)
 
-        value = self.lldb_value.deref.Cast(float_type)
+        value = self.deref.Cast(float_type)
         fval = value.GetChildMemberWithName('ob_fval')
         return float(fval.GetValue())
 
@@ -141,12 +150,13 @@ class PyFloatObject(PyObject):
 class PyBytesObject(PyObject):
 
     typename = 'bytes'
+    cpython_struct = 'PyBytesObject'
 
     @property
     def value(self):
-        bytes_type = self.target.FindFirstType('PyBytesObject')
+        bytes_type = self.target.FindFirstType(self.cpython_struct)
 
-        value = self.lldb_value.deref.Cast(bytes_type)
+        value = self.deref.Cast(bytes_type)
         size = value.GetChildMemberWithName('ob_base') \
                     .GetChildMemberWithName('ob_size') \
                     .unsigned
@@ -158,6 +168,7 @@ class PyBytesObject(PyObject):
 class PyUnicodeObject(PyObject):
 
     typename = 'str'
+    cpython_struct = 'PyUnicodeObject'
 
     U_WCHAR_KIND = 0
     U_1BYTE_KIND = 1
@@ -166,9 +177,9 @@ class PyUnicodeObject(PyObject):
 
     @property
     def value(self):
-        str_type = self.target.FindFirstType('PyUnicodeObject')
+        str_type = self.target.FindFirstType(self.cpython_struct)
 
-        value = self.lldb_value.deref.Cast(str_type)
+        value = self.deref.Cast(str_type)
         state = value.GetChildMemberWithName('_base') \
                      .GetChildMemberWithName('_base') \
                      .GetChildMemberWithName('state')
@@ -222,7 +233,7 @@ class _PySequence(object):
 
     @property
     def value(self):
-        value = self.lldb_value.deref.Cast(self.lldb_type)
+        value = self.deref.Cast(self.lldb_type)
         size = value.GetChildMemberWithName('ob_base') \
                     .GetChildMemberWithName('ob_size') \
                     .signed
@@ -238,29 +249,33 @@ class PyListObject(_PySequence, PyObject):
 
     python_type = list
     typename = 'list'
+    cpython_struct = 'PyListObject'
 
     @property
     def lldb_type(self):
-        return self.target.FindFirstType('PyListObject')
+        return self.target.FindFirstType(self.cpython_struct)
 
 
 class PyTupleObject(_PySequence, PyObject):
 
     python_type = tuple
     typename = 'tuple'
+    cpython_struct = 'PyTupleObject'
 
     @property
     def lldb_type(self):
-        return self.target.FindFirstType('PyTupleObject')
+        return self.target.FindFirstType(self.cpython_struct)
 
 
 class _PySetObject(object):
 
+    cpython_struct = 'PySetObject'
+
     @property
     def value(self):
-        set_type = self.target.FindFirstType('PySetObject')
+        set_type = self.target.FindFirstType(self.cpython_struct)
 
-        value = self.lldb_value.deref.Cast(set_type)
+        value = self.deref.Cast(set_type)
         size = value.GetChildMemberWithName('mask').unsigned + 1
         table = value.GetChildMemberWithName('table')
         array = table.deref.Cast(
@@ -303,7 +318,7 @@ class _PyDictObject(object):
         dictentry_type = self.target.FindFirstType('PyDictKeyEntry')
         object_type = self.target.FindFirstType('PyObject')
 
-        value = self.lldb_value.deref.Cast(dict_type)
+        value = self.deref.Cast(dict_type)
 
         ma_keys = value.GetChildMemberWithName('ma_keys')
         table_size = ma_keys.GetChildMemberWithName('dk_size').unsigned
@@ -368,6 +383,7 @@ class PyDictObject(_PyDictObject, PyObject):
 
     python_type = dict
     typename = 'dict'
+    cpython_struct = 'PyDictObject'
 
 
 class Counter(_PyDictObject, PyObject):
@@ -385,11 +401,12 @@ class OrderedDict(_PyDictObject, PyObject):
 class Defaultdict(PyObject):
 
     typename = 'collections.defaultdict'
+    cpython_struct = 'defdictobject'
 
     @property
     def value(self):
         dict_type = self.target.FindFirstType('defdictobject')
-        value = self.lldb_value.deref.Cast(dict_type)
+        value = self.deref.Cast(dict_type)
         # for the time being, let's just convert it to a regular dict,
         # as we can't properly display the repr of the default_factory
         # anyway, because in order to do that we would need to execute
@@ -972,11 +989,41 @@ def pretty_printer(value, internal_dict):
     value (similar to `repr(something)` in Python).
     """
 
-    return repr(PyObject.from_value(value))
+    if value.TypeIsPointerType():
+        type_name = value.type.GetPointeeType().name
+    else:
+        type_name = value.type.name
+
+    return repr(pretty_printer._cpython_structs[type_name](value))
 
 
-def __lldb_init_module(debugger, internal_dict):
+def register_summaries(debugger):
+    cpython_structs = {}
+
+    # normally, PyObject instances are referenced via a generic PyObject* pointer.
+    # pretty_printer() will read the value of ob_type->tp_name to determine the
+    # concrete type of the object being inspected
+    cpython_structs['PyObject'] = lambda v: PyObject.from_value(v)
     debugger.HandleCommand(
         'type summary add -F cpython_lldb.pretty_printer PyObject'
     )
+
+    # at the same time, built-in types can be referenced directly via pointers to
+    # CPython structs. In this case, we also want to be able to print type summaries
+    cpython_structs.update({
+        cls.cpython_struct: cls
+        for cls in PyObject.__subclasses__()
+        if hasattr(cls, 'cpython_struct')
+    })
+    for type_ in cpython_structs:
+        debugger.HandleCommand(
+            'type summary add -F cpython_lldb.pretty_printer {}'.format(type_)
+        )
+
+    # cache the result of the lookup, so that we do not need to repeat that at runtime
+    pretty_printer._cpython_structs = cpython_structs
+
+
+def __lldb_init_module(debugger, internal_dict):
+    register_summaries(debugger)
     register_commands(debugger)
