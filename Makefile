@@ -33,7 +33,7 @@ test: build-image
 		--security-opt seccomp:unconfined --cap-add=SYS_PTRACE \
 		-e PYTHONHASHSEED=1 \
 		cpython-lldb:$(DOCKER_IMAGE_TAG) \
-		bash -c "cd /root/.lldb/cpython-lldb && poetry run pytest -vv tests/"
+		bash -c "cd /root/.lldb/cpython-lldb && poetry run pytest -n 4 -vv tests/ -m 'not serial' && poetry run pytest -n 0 -vv tests/ -m 'serial'"
 
 test-py35: PY_VERSION=3.5
 test-py35: test

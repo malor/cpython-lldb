@@ -20,3 +20,4 @@ six = "^1.0.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^4.4.0"
+pytest-xdist = "^1.34.0"

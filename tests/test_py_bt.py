@@ -107,6 +107,7 @@ Traceback (most recent call last):
     assert actual == backtrace
 
 
+@pytest.mark.serial  # strip_symbols does not play nicely with other tests when run in parallel
 @pytest.mark.usefixtures('strip_symbols')
 def test_without_symbols():
     code = '''
