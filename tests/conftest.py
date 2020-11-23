@@ -47,6 +47,7 @@ def run_lldb(code, breakpoint, commands, no_symbols=False):
 
     old_cwd = os.getcwd()
     d = tempfile.mkdtemp()
+    os.chdir(d)
     try:
         with io.open('test.py', 'wb') as fp:
             if isinstance(code, str):
