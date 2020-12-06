@@ -1,0 +1,9 @@
+[tool.poetry]
+name = "test_extension"
+version = "0.1.0"
+description = "A dummy CPython Extension for cpython_lldb tests"
+authors = ["Roman Podoliaka <roman.podoliaka@gmail.com>"]
+build = "build.py"
+
+[tool.poetry.dependencies]
+python = "*"

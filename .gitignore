@@ -2,3 +2,7 @@
 __pycache__
 *.pyc
 *.pyo
+build/
+dist/
+tests/test_extension/build/
+tests/test_extension/dist/
