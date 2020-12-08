@@ -1,7 +1,7 @@
 import collections
 import re
 
-from .conftest import run_lldb
+from .conftest import run_lldb, extract_command_output
 
 
 def lldb_repr_from_frame(value):
@@ -225,3 +225,52 @@ def test_counter():
 
 def test_unsupported():
     assert_lldb_repr(object(), '(\'0x[0-9a-f]+\')|(\'No value\')', code_value='object()')
+
+
+def test_locals_c_extension():
+    code = 'import test_extension; test_extension.spam()'
+    response = run_lldb(
+        code=code,
+        breakpoint='builtin_abs',
+        commands=['bt'],
+    )
+    frame_match = re.search(r'.*frame #(\d+).*_test_extension.*`spam.*',
+                            extract_command_output(response, 'bt'))
+    if frame_match:
+        frame_index = int(frame_match.groups()[0])
+
+    # this could be replaced with a regex, but a plain string seems to be more readable
+    expected_py2 = u'''\
+(PyBytesObject *) local_bytes = 'eggs'
+(PyDictObject *) local_dict = {u'foo': 42}
+(PyFloatObject *) local_float = 0.0
+(PyListObject *) local_list = [17, 18, 19]
+(PyLongObject *) local_long = 17
+(PyTupleObject *) local_tuple = (24, 23, 22)
+(PyUnicodeObject *) local_unicode = u'hello'
+'''.rstrip()
+
+    expected_py3 = u'''\
+(PyBytesObject *) local_bytes = b'eggs'
+(PyDictObject *) local_dict = {'foo': 42}
+(PyFloatObject *) local_float = 0.0
+(PyListObject *) local_list = [17, 18, 19]
+(PyLongObject *) local_long = 17
+(PyTupleObject *) local_tuple = (24, 23, 22)
+(PyUnicodeObject *) local_unicode = 'hello'
+'''.rstrip()
+
+    response = run_lldb(
+        code=code,
+        breakpoint='builtin_abs',
+        commands=['up'] * frame_index + ['frame variable'],
+    )
+    actual = u'\n'.join(
+        sorted(
+            re.sub(r'(0x[0-9a-f]+ )', '', line)
+            for line in extract_command_output(response, 'frame variable').splitlines()
+            if u'local_' in line
+        )
+    )
+
+    assert (actual == expected_py2) or (actual == expected_py3)

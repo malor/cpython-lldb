@@ -994,27 +994,25 @@ def pretty_printer(value, internal_dict):
     else:
         type_name = value.type.name
 
-    return repr(pretty_printer._cpython_structs[type_name](value))
+    v = pretty_printer._cpython_structs.get(type_name, PyObject.from_value)(value)
+    return repr(v)
 
 
 def register_summaries(debugger):
-    cpython_structs = {}
-
     # normally, PyObject instances are referenced via a generic PyObject* pointer.
     # pretty_printer() will read the value of ob_type->tp_name to determine the
     # concrete type of the object being inspected
-    cpython_structs['PyObject'] = lambda v: PyObject.from_value(v)
     debugger.HandleCommand(
         'type summary add -F cpython_lldb.pretty_printer PyObject'
     )
 
     # at the same time, built-in types can be referenced directly via pointers to
     # CPython structs. In this case, we also want to be able to print type summaries
-    cpython_structs.update({
+    cpython_structs = {
         cls.cpython_struct: cls
         for cls in PyObject.__subclasses__()
         if hasattr(cls, 'cpython_struct')
-    })
+    }
     for type_ in cpython_structs:
         debugger.HandleCommand(
             'type summary add -F cpython_lldb.pretty_printer {}'.format(type_)
