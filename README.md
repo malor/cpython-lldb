@@ -64,7 +64,7 @@ and tell LLDB to load it from there, e.g. ~/.lldb:
 ```shell
 $ mkdir -p ~/.lldb/cpython_lldb
 $ python -m pip install --target ~/.lldb/cpython_lldb cpython-lldb
-$ echo "command script import ~/.lldb/cpythob_lldb/cpython_lldb.py" >> ~/.lldbinit
+$ echo "command script import ~/.lldb/cpython_lldb/cpython_lldb.py" >> ~/.lldbinit
 $ chmod +x ~/.lldbinit
 ```
 
