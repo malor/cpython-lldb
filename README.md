@@ -323,25 +323,31 @@ Running tests
 
 Tests currently require `make` and `docker` to be installed.
 
-To run the tests against the *latest* released CPython version do:
+To run the tests against the *latest* released CPython version, do:
 
 ```
 $ make test
 ```
 
-To run the tests against a specific CPython version do:
+To run the tests against a specific CPython (or LLDB) version, do:
 
 ```
-$ make test-pyXX
+$ PY_VERSION=X.Y LLDB_VERSION=Z make test
 ```
 
-Supported versions are:
-* `py35`
-* `py36`
-* `py37`
-* `py38`
-* `py39`
+Supported CPython versions are:
+* `3.5`
+* `3.6`
+* `3.7`
+* `3.8`
+* `3.9`
 
+Supported LLDB versions:
+* `7`
+* `8`
+* `9`
+* `10`
+* `11`
 
 Contributors
 ============
