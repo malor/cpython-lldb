@@ -1,8 +1,6 @@
 Overview
 ========
 
-[![Build Status](https://travis-ci.org/malor/cpython-lldb.svg?branch=master)](https://travis-ci.org/malor/cpython-lldb)
-
 `cpython_lldb` is an LLDB extension for debugging Python programs.
 
 It may be useful for troubleshooting stuck threads and crashes in the interpreter,
