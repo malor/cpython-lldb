@@ -32,8 +32,28 @@ static PyObject* spam(PyObject* self, PyObject* args) {
     return Py_None;
 }
 
+static PyObject* eggs(PyObject* self, PyObject* args, PyObject* kwargs) {
+    PyObject* f = NULL;
+    if (!PyArg_ParseTuple(args, "O", &f) || f == NULL) {
+        return NULL;
+    }
+
+    PyObject* v = PyDict_GetItemString(kwargs, "v");
+    if (v == NULL) {
+        return NULL;
+    }
+
+    PyObject* argslist = Py_BuildValue("(O)", v);
+    if (argslist == NULL) {
+        return NULL;
+    }
+
+    return PyObject_CallObject(f, argslist);
+}
+
 static PyMethodDef methods[] = {
     { "spam", spam, METH_NOARGS, "Test Extension Function" },
+    { "eggs", eggs, METH_VARARGS | METH_KEYWORDS, "Test Extension Function" },
     { NULL, NULL, 0, NULL }
 };
 

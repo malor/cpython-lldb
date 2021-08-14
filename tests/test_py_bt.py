@@ -172,3 +172,35 @@ Traceback (most recent call last):
     )
     actual = extract_command_output(response, 'py-bt')
     assert actual == backtrace
+
+
+def test_c_extension():
+    code = u'''
+import test_extension
+
+def f():
+  return test_extension.eggs(g, v=42)
+
+def g(v):
+  return abs(v)
+
+f()
+'''.lstrip()
+
+    backtrace = u'''
+Traceback (most recent call last):
+  File "test.py", line 9, in <module>
+    f()
+  File "test.py", line 4, in f
+    return test_extension.eggs(g, v=42)
+  File "test.py", line 7, in g
+    return abs(v)
+'''.lstrip()
+
+    response = run_lldb(
+         code=code,
+         breakpoint='builtin_abs',
+         commands=['py-bt'],
+    )
+    actual = extract_command_output(response, 'py-bt')
+    assert actual == backtrace
