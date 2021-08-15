@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from .conftest import extract_command_output, run_lldb
@@ -38,6 +40,88 @@ Traceback (most recent call last):
         code=code,
         breakpoint='builtin_abs',
         commands=['py-bt'],
+    )
+    actual = extract_command_output(response, 'py-bt')
+    assert actual == backtrace
+
+
+def test_simple_from_the_middle_of_the_call_stack():
+    code = '''
+def fa():
+    abs(1)
+    return 1
+
+
+def fb():
+    1 + 1
+    fa()
+
+
+def fc():
+    fb()
+
+
+fc()
+'''.lstrip()
+
+    response = run_lldb(
+        code=code,
+        breakpoint='builtin_abs',
+        commands=['bt'],
+    )
+    pyframes = re.findall(r'.*frame #(\d+).*(_PyEval_EvalFrameDefault|PyEval_EvalFrameEx).*',
+                          extract_command_output(response, 'bt'))
+
+    backtrace = '''
+Traceback (most recent call last):
+  File "test.py", line 15, in <module>
+    fc()
+  File "test.py", line 12, in fc
+    fb()
+'''.lstrip()
+
+    response = run_lldb(
+        code=code,
+        breakpoint='builtin_abs',
+        commands=['frame select %d' % int(pyframes[2][0]), 'py-bt'],
+    )
+    actual = extract_command_output(response, 'py-bt')
+    assert actual == backtrace
+
+
+def test_simple_from_the_middle_of_the_call_stack_no_pyframes_left():
+    code = '''
+def fa():
+    abs(1)
+    return 1
+
+
+def fb():
+    1 + 1
+    fa()
+
+
+def fc():
+    fb()
+
+
+fc()
+'''.lstrip()
+
+    response = run_lldb(
+        code=code,
+        breakpoint='builtin_abs',
+        commands=['bt'],
+    )
+    pyframes = re.findall(r'.*frame #(\d+).*(_PyEval_EvalFrameDefault|PyEval_EvalFrameEx).*',
+                          extract_command_output(response, 'bt'))
+
+    backtrace = 'No Python traceback found\n'
+
+    response = run_lldb(
+        code=code,
+        breakpoint='builtin_abs',
+        commands=['frame select %d' % (int(pyframes[-1][0]) + 1), 'py-bt'],
     )
     actual = extract_command_output(response, 'py-bt')
     assert actual == backtrace
@@ -117,7 +201,7 @@ def f():
 f()
 '''.lstrip()
 
-    backtrace = 'No Python traceback found (symbols might be missing)!\n'
+    backtrace = 'No Python traceback found\n'
 
     response = run_lldb(
         code=code,
@@ -137,7 +221,7 @@ def f():
 f()
 '''.lstrip()
 
-    backtrace = 'No Python traceback found (symbols might be missing)!\n'
+    backtrace = 'No Python traceback found\n'
 
     response = run_lldb(
         code=code,
