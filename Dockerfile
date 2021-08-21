@@ -1,10 +1,11 @@
 ARG PY_VERSION=latest
 FROM python:${PY_VERSION}
 
-ARG LLDB_VERSION=10
+ARG LLDB_VERSION=11
 
-RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
-    echo "deb http://apt.llvm.org/buster/ llvm-toolchain-buster-${LLDB_VERSION} main" >> /etc/apt/sources.list && \
+RUN DEBIAN_VERSION=`awk -F"[)(]+" '/VERSION=/ {print $2}' /etc/os-release` && \
+    wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
+    echo "deb http://apt.llvm.org/${DEBIAN_VERSION}/ llvm-toolchain-${DEBIAN_VERSION}-${LLDB_VERSION} main" >> /etc/apt/sources.list; \
     apt-get update && apt-get install -y lldb-${LLDB_VERSION} && \
     ln -s /usr/bin/lldb-${LLDB_VERSION} /usr/bin/lldb
 

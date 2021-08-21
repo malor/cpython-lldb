@@ -577,10 +577,15 @@ class PyFrameObject(PyObject):
     @classmethod
     def get_pystack(cls, thread):
         pyframes = []
-        for frame in thread:
+
+        frame = thread.GetSelectedFrame()
+        while frame:
             pyframe = cls.from_frame(frame)
             if pyframe is not None:
                 pyframes.append(pyframe)
+
+            frame = frame.get_parent_frame()
+
         return pyframes
 
     @property
@@ -708,7 +713,7 @@ class PyBt(Command):
             write_string(result, u'Traceback (most recent call last):')
             write_string(result, u'\n'.join(lines))
         else:
-            write_string(result, u'No Python traceback found (symbols might be missing)!')
+            write_string(result, u'No Python traceback found')
 
 
 class PyList(Command):
