@@ -38,11 +38,6 @@ Features
 * listing the source code
 * walking up and down the Python call stack
 
-TODO:
-
-* stack traces w/ mixed stacks (e.g. involving calls to clibs)
-
-
 Installation
 ============
 
