@@ -22,7 +22,8 @@ ENV PYTHONPATH /usr/lib/llvm-${LLDB_VERSION}/lib/python3/dist-packages
 
 COPY . /root/.lldb/cpython-lldb
 RUN cd /root/.lldb/cpython-lldb && \
-    python -m pip install "poetry>=0.12,<0.13" && \
+    python -m pip install poetry && \
+    poetry version $(git describe --tags --abbrev=0) && \
     poetry install && poetry build -n -f wheel && \
     mkdir -p ~/.lldb/cpython_lldb/site-packages && \
     python -m pip install --target ~/.lldb/cpython_lldb/site-packages dist/*.whl && rm -rf dist && \

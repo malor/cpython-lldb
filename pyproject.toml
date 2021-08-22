@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cpython-lldb"
-version = "0.2.0"
+version = "0.0.0"
 description = "LLDB script for debugging of CPython processes"
 license = "MIT"
 
