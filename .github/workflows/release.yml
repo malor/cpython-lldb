@@ -24,17 +24,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install poetry
 
-      - name: Build artifacts
-        run: |
-          git fetch --tags
-
-          poetry version $(git describe --tags --abbrev=0)
-          if [[ "${GITHUB_REF}" != refs/tags/* ]]; then
-            poetry version preminor
-          fi
-
-          poetry build
-
       - id: release_params
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
@@ -42,10 +31,16 @@ jobs:
             echo "::set-output name=release_tag::${GITHUB_REF#refs/tags/}"
             echo "::set-output name=title::${GITHUB_REF#refs/tags/}"
           else
+            git fetch --tags
             echo "::set-output name=prerelease::true"
-            echo "::set-output name=release_tag::$(poetry version -s)"
+            echo "::set-output name=release_tag::$(git tag --list --sort=version:refname | tail -n 1)-dev"
             echo "::set-output name=title::Development Build"
           fi
+
+      - name: Build artifacts
+        run: |
+          poetry version ${{ steps.release_params.outputs.release_tag }}
+          poetry build
 
       - id: create_release
         uses: "marvinpinto/action-automatic-releases@latest"
