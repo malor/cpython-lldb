@@ -53,6 +53,6 @@ jobs:
             dist/*.whl
 
       - name: Publish to PyPI (only if it's a final release)
-        if: ${{ !steps.release_params.outputs.prerelease }}
+        if: ${{ !fromJSON(steps.release_params.outputs.prerelease) }}
         run: |
           poetry publish --username ${{ secrets.PYPI_USERNAME }} --password ${{ secrets.PYPI_PASSWORD }}
