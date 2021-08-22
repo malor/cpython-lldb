@@ -1,0 +1,57 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ master ]
+    tags:
+      - "*"
+
+jobs:
+  deploy:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+
+      - name: Build artifacts
+        run: |
+          poetry version $(git describe --tags --abbrev=0)
+          poetry build
+
+      - id: release_params
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "::set-output name=prerelease::false"
+            echo "::set-output name=release_tag::${GITHUB_REF#refs/tags/}"
+            echo "::set-output name=title::${GITHUB_REF#refs/tags/}"
+          else
+            echo "::set-output name=prerelease::true"
+            echo "::set-output name=release_tag::latest"
+            echo "::set-output name=title::Development Build"
+          fi
+
+      - id: create_release
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: ${{ steps.release_params.outputs.prerelease }}
+          automatic_release_tag: ${{ steps.release_params.outputs.release_tag }}
+          title: ${{ steps.release_params.outputs.title }}
+          files: |
+            - dist/*.whl
+
+      - name: Publish to PyPI (only if it's a final release)
+        if: ${{ !steps.release_params.outputs.prerelease }}
+        run: |
+          poetry publish --username ${{ secrets.PYPI_USERNAME }} --password ${{ secrets.PYPI_PASSWORD }}
