@@ -5,6 +5,7 @@ import io
 import locale
 import re
 import shlex
+import struct
 
 import lldb
 import six
@@ -450,14 +451,120 @@ class UserString(_CollectionsUserObject, PyObject):
     typename = 'UserString'
 
 
+class PyCodeAddressRange(object):
+    """A class for parsing the line number table implemented in PEP 626.
+
+    The format of the line number table is not part of CPython's API and may
+    change without warning. The PEP has a dedicated section
+    (https://www.python.org/dev/peps/pep-0626/#out-of-process-debuggers-and-profilers),
+    which says that tools, that can't use C-API, should just copy the implementation
+    of functions required for parsing this table. We do just that below but also
+    translate C to Python.
+    """
+
+    def __init__(self, co_linetable, co_firstlineno):
+        """Implements PyLineTable_InitAddressRange from codeobject.c."""
+
+        self.lo_next = 0
+        self.co_linetable = co_linetable
+        self.computed_line = co_firstlineno
+        self.ar_start = -1
+        self.ar_end = 0
+        self.ar_line = -1
+
+    def next_address_range(self):
+        """Implements PyLineTable_NextAddressRange from codeobject.c."""
+
+        if self._at_end():
+            return False
+
+        self._advance()
+        while self.ar_start == self.ar_end:
+            self._advance()
+
+        return True
+
+    def prev_address_range(self):
+        """Implements PyLineTable_PreviousAddressRange from codeobject.c."""
+
+        if self.ar_start <= 0:
+            return False
+
+        self._retreat()
+        while self.ar_start == self.ar_end:
+            self._retreat()
+
+        return True
+
+    def _at_end(self):
+        return self.lo_next >= len(self.co_linetable)
+
+    def _advance(self):
+        self.ar_start = self.ar_end
+        delta = struct.unpack('B', self.co_linetable[self.lo_next:self.lo_next + 1])[0]
+        self.ar_end += delta
+        ldelta = struct.unpack('b', self.co_linetable[self.lo_next + 1:self.lo_next + 2])[0]
+        self.lo_next += 2
+
+        if ldelta == -128:
+            self.ar_line = -1
+        else:
+            self.computed_line += ldelta
+            self.ar_line = self.computed_line
+
+    def _retreat(self):
+        ldelta = struct.unpack('b', self.co_linetable[self.lo_next - 1:self.lo_next])[0]
+        if ldelta == -128:
+            ldelta = 0
+
+        self.computed_line -= ldelta
+        self.lo_next -= 2
+        self.ar_end = self.ar_start
+        self.ar_start -= struct.unpack('B', self.co_linetable[self.lo_next - 2:self.lo_next - 1])[0]
+        ldelta = struct.unpack('b', self.co_linetable[self.lo_next - 1:self.lo_next])[0]
+        if ldelta == -128:
+            self.ar_line = -1
+        else:
+            self.ar_line = self.computed_line
+
+
 class PyCodeObject(PyObject):
 
-    typename = "code"
+    typename = 'code'
 
-    def addr2line(self, address):
-        """
-        Translated pseudocode from ``Objects/lnotab_notes.txt``
-        """
+    def addr2line(self, f_lineno, f_lasti):
+        addr_range_type = self.target.FindFirstType('PyCodeAddressRange')
+        if addr_range_type.IsValid():
+            # CPython >= 3.10 (PEP 626)
+            if f_lineno:
+                return f_lineno
+            else:
+                return self._from_co_linetable(f_lasti * 2)
+        else:
+            # CPython < 3.10
+            return self._from_co_lnotab(f_lasti) + f_lineno
+
+    def _from_co_linetable(self, address):
+        """Translated code from Objects/codeobject.c:PyCode_Addr2Line."""
+
+        co_linetable = PyObject.from_value(self.child('co_linetable')).value
+        co_firstlineno = self.child('co_firstlineno').signed
+        if address < 0:
+            return co_firstlineno
+
+        bounds = PyCodeAddressRange(co_linetable, co_firstlineno)
+        while bounds.ar_end <= address:
+            if not bounds.next_address_range():
+                return -1
+        while bounds.ar_start > address:
+            if not bounds.prev_address_range():
+                return -1
+
+        return bounds.ar_line
+
+    def _from_co_lnotab(self, address):
+        """Translated pseudocode from Objects/lnotab_notes.txt."""
+
         co_lnotab = PyObject.from_value(self.child('co_lnotab')).value
         assert len(co_lnotab) % 2 == 0
 
@@ -594,9 +701,10 @@ class PyFrameObject(PyObject):
 
     @property
     def line_number(self):
-        anchor = self.child('f_lineno').unsigned
-        address = self.child('f_lasti').unsigned
-        return self.co.addr2line(address) + anchor
+        f_lineno = self.child('f_lineno').signed
+        f_lasti = self.child('f_lasti').signed
+
+        return self.co.addr2line(f_lineno, f_lasti)
 
     @property
     def line(self):
