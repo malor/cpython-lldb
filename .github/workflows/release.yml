@@ -7,7 +7,7 @@ on:
       - "*"
 
 jobs:
-  deploy:
+  release:
 
     runs-on: ubuntu-latest
 
@@ -33,7 +33,7 @@ jobs:
           else
             git fetch --tags
             echo "::set-output name=prerelease::true"
-            echo "::set-output name=release_tag::$(git tag --list --sort=version:refname | tail -n 1)-dev"
+            echo "::set-output name=release_tag::$(git tag --list --sort=version:refname | grep -v dev | tail -n 1)-dev"
             echo "::set-output name=title::Development Build"
           fi
 
