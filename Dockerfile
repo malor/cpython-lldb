@@ -20,9 +20,10 @@ RUN if [ "${LLDB_VERSION}" = "9" ]; then \
 
 ENV PYTHONPATH /usr/lib/llvm-${LLDB_VERSION}/lib/python3/dist-packages
 
+RUN python -m pip install poetry==1.1.8
+
 COPY . /root/.lldb/cpython-lldb
 RUN cd /root/.lldb/cpython-lldb && \
-    python -m pip install poetry && \
     poetry version $(git describe --tags --abbrev=0) && \
     # a workaround for https://github.com/python-poetry/poetry/issues/4210 to make this work on Python 3.10
     poetry config experimental.new-installer false && \
