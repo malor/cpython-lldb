@@ -1,4 +1,4 @@
-from .conftest import extract_command_output, run_lldb
+from .conftest import run_lldb
 
 
 CODE = u'''\
@@ -24,7 +24,7 @@ fc()
 '''.lstrip()
 
 
-def test_locals():
+def test_locals(lldb):
     # this could be replaced with a regex, but a plain string seems to be more readable
     expected_py2 = u'''\
 a = 42
@@ -36,7 +36,7 @@ e = {u'a': -1}
 eggs = 42
 kwargs = {u'foo': 'spam'}
 spam = u'foobar'
-'''
+'''.rstrip()
 
     expected_py3 = u'''\
 a = 42
@@ -48,24 +48,26 @@ e = {'a': -1}
 eggs = 42
 kwargs = {'foo': b'spam'}
 spam = 'foobar'
-'''
+'''.rstrip()
     response = run_lldb(
+        lldb,
         code=CODE,
         breakpoint='builtin_abs',
         commands=['py-up', 'py-locals'],
-    )
-    actual = extract_command_output(response, 'py-locals')
+    )[-1]
+    actual = response.rstrip()
 
     assert (actual == expected_py2) or (actual == expected_py3)
 
 
-def test_globals():
+def test_globals(lldb):
     response = run_lldb(
+        lldb,
         code=CODE,
         breakpoint='builtin_abs',
         commands=['py-up', 'py-up', 'py-up', 'py-locals'],
-    )
-    actual = extract_command_output(response, 'py-locals')
+    )[-1]
+    actual = response.rstrip()
 
     actual_keys = set(line.split('=')[0].strip()
                       for line in actual.split('\n') if line)
@@ -75,12 +77,13 @@ def test_globals():
     assert (expected_keys & actual_keys) == expected_keys
 
 
-def test_no_locals():
+def test_no_locals(lldb):
     response = run_lldb(
+        lldb,
         code=CODE,
         breakpoint='builtin_abs',
         commands=['py-locals'],
-    )
-    actual = extract_command_output(response, 'py-locals')
+    )[-1]
+    actual = response.rstrip()
 
-    assert actual == u'\n'
+    assert actual == u''

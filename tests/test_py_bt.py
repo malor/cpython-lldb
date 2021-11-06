@@ -2,10 +2,10 @@ import re
 
 import pytest
 
-from .conftest import extract_command_output, run_lldb
+from .conftest import run_lldb
 
 
-def test_simple():
+def test_simple(lldb):
     code = '''
 def fa():
     abs(1)
@@ -34,18 +34,19 @@ Traceback (most recent call last):
     fa()
   File "test.py", line 2, in fa
     abs(1)
-'''.lstrip()
+'''.strip()
 
     response = run_lldb(
+        lldb,
         code=code,
         breakpoint='builtin_abs',
         commands=['py-bt'],
-    )
-    actual = extract_command_output(response, 'py-bt')
+    )[-1]
+    actual = response.rstrip()
     assert actual == backtrace
 
 
-def test_simple_from_the_middle_of_the_call_stack():
+def test_simple_from_the_middle_of_the_call_stack(lldb):
     code = '''
 def fa():
     abs(1)
@@ -65,12 +66,13 @@ fc()
 '''.lstrip()
 
     response = run_lldb(
+        lldb,
         code=code,
         breakpoint='builtin_abs',
         commands=['bt'],
-    )
+    )[-1]
     pyframes = re.findall(r'.*frame #(\d+).*(_PyEval_EvalFrameDefault|PyEval_EvalFrameEx).*',
-                          extract_command_output(response, 'bt'))
+                          response)
 
     backtrace = '''
 Traceback (most recent call last):
@@ -78,18 +80,19 @@ Traceback (most recent call last):
     fc()
   File "test.py", line 12, in fc
     fb()
-'''.lstrip()
+'''.strip()
 
     response = run_lldb(
+        lldb,
         code=code,
         breakpoint='builtin_abs',
         commands=['frame select %d' % int(pyframes[2][0]), 'py-bt'],
-    )
-    actual = extract_command_output(response, 'py-bt')
+    )[-1]
+    actual = response.rstrip()
     assert actual == backtrace
 
 
-def test_simple_from_the_middle_of_the_call_stack_no_pyframes_left():
+def test_simple_from_the_middle_of_the_call_stack_no_pyframes_left(lldb):
     code = '''
 def fa():
     abs(1)
@@ -106,28 +109,30 @@ def fc():
 
 
 fc()
-'''.lstrip()
+'''.strip()
 
     response = run_lldb(
+        lldb,
         code=code,
         breakpoint='builtin_abs',
         commands=['bt'],
-    )
+    )[-1]
     pyframes = re.findall(r'.*frame #(\d+).*(_PyEval_EvalFrameDefault|PyEval_EvalFrameEx).*',
-                          extract_command_output(response, 'bt'))
+                          response)
 
-    backtrace = 'No Python traceback found\n'
+    backtrace = 'No Python traceback found'
 
     response = run_lldb(
+        lldb,
         code=code,
         breakpoint='builtin_abs',
         commands=['frame select %d' % (int(pyframes[-1][0]) + 1), 'py-bt'],
-    )
-    actual = extract_command_output(response, 'py-bt')
+    )[-1]
+    actual = response.rstrip()
     assert actual == backtrace
 
 
-def test_class():
+def test_class(lldb):
     code = '''
 class C(object):
     def ca(self):
@@ -180,20 +185,19 @@ Traceback (most recent call last):
     self.ca()
   File "test.py", line 3, in ca
     abs(1)
-'''.lstrip()
+'''.strip()
 
     response = run_lldb(
+        lldb,
         code=code,
         breakpoint='builtin_abs',
         commands=['py-bt'],
-    )
-    actual = extract_command_output(response, 'py-bt')
+    )[-1]
+    actual = response.rstrip()
     assert actual == backtrace
 
 
-@pytest.mark.serial  # strip_symbols does not play nicely with other tests when run in parallel
-@pytest.mark.usefixtures('strip_symbols')
-def test_without_symbols():
+def test_without_symbols(lldb_no_symbols):
     code = '''
 def f():
     abs(1)
@@ -201,19 +205,19 @@ def f():
 f()
 '''.lstrip()
 
-    backtrace = 'No Python traceback found\n'
+    backtrace = 'No Python traceback found'
 
     response = run_lldb(
+        lldb_no_symbols,
         code=code,
         breakpoint='builtin_abs',
         commands=['py-bt'],
-        no_symbols=True,
-    )
-    actual = extract_command_output(response, 'py-bt')
+    )[-1]
+    actual = response.rstrip()
     assert actual == backtrace
 
 
-def test_no_backtrace():
+def test_no_backtrace(lldb):
     code = '''
 def f():
     abs(1)
@@ -221,19 +225,19 @@ def f():
 f()
 '''.lstrip()
 
-    backtrace = 'No Python traceback found\n'
+    backtrace = 'No Python traceback found'
 
     response = run_lldb(
+        lldb,
         code=code,
-        breakpoint='breakpoint_does_not_exist',
+        breakpoint='__libc_start_main',
         commands=['py-bt'],
-        no_symbols=True,
-    )
-    actual = extract_command_output(response, 'py-bt')
+    )[-1]
+    actual = response.rstrip()
     assert actual == backtrace
 
 
-def test_frame_finding_heuristic_on_short_call_stacks():
+def test_frame_finding_heuristic_on_short_call_stacks(lldb):
     code = u'''
 def f():
     abs(1)
@@ -247,18 +251,19 @@ Traceback (most recent call last):
     f()
   File "test.py", line 2, in f
     abs(1)
-'''.lstrip()
+'''.strip()
 
     response = run_lldb(
+        lldb,
         code=code,
         breakpoint='builtin_abs',
         commands=['py-bt'],
-    )
-    actual = extract_command_output(response, 'py-bt')
+    )[-1]
+    actual = response.rstrip()
     assert actual == backtrace
 
 
-def test_c_extension():
+def test_c_extension(lldb):
     code = u'''
 import test_extension
 
@@ -279,12 +284,13 @@ Traceback (most recent call last):
     return test_extension.eggs(g, v=42)
   File "test.py", line 7, in g
     return abs(v)
-'''.lstrip()
+'''.strip()
 
     response = run_lldb(
+         lldb,
          code=code,
          breakpoint='builtin_abs',
          commands=['py-bt'],
-    )
-    actual = extract_command_output(response, 'py-bt')
+    )[-1]
+    actual = response.rstrip()
     assert actual == backtrace

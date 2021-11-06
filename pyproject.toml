@@ -19,6 +19,7 @@ python = "~2.7 || ^3.5"
 six = "^1.0.0"
 
 [tool.poetry.dev-dependencies]
+pexpect = "^4.8.0"
 # we want to specify the depedency on pytest here as well, but that confuses poetry, so we rely
 # on pytest-xdist to depend on pytest transitively instead
 pytest-xdist = [

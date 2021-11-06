@@ -1,4 +1,4 @@
-from .conftest import extract_command_output, run_lldb
+from .conftest import run_lldb
 
 
 CODE = u'''
@@ -23,7 +23,7 @@ fc()
 '''.lstrip()
 
 
-def test_default():
+def test_default(lldb):
     expected = u'''\
     1    SOME_CONST = u'тест'
     2    
@@ -35,18 +35,19 @@ def test_default():
     8    
     9    def fb():
    10        1 + 1
-'''
+'''.rstrip()
     response = run_lldb(
+        lldb,
         code=CODE,
         breakpoint='builtin_abs',
         commands=['py-list'],
-    )
-    actual = extract_command_output(response, 'py-list')
+    )[-1]
+    actual = response.rstrip()
 
     assert actual == expected
 
 
-def test_start():
+def test_start(lldb):
     expected = u'''\
     4    def fa():
    >5        abs(1)
@@ -59,18 +60,19 @@ def test_start():
    12    
    13    
    14    def fc():
-'''
+'''.rstrip()
     response = run_lldb(
+        lldb,
         code=CODE,
         breakpoint='builtin_abs',
         commands=['py-list 4'],
-    )
-    actual = extract_command_output(response, 'py-list 4')
+    )[-1]
+    actual = response.rstrip()
 
     assert actual == expected
 
 
-def test_start_end():
+def test_start_end(lldb):
     expected = u'''\
     4    def fa():
    >5        abs(1)
@@ -80,18 +82,19 @@ def test_start_end():
     9    def fb():
    10        1 + 1
    11        fa()
-'''
+'''.rstrip()
     response = run_lldb(
+        lldb,
         code=CODE,
         breakpoint='builtin_abs',
         commands=['py-list 4 11'],
-    )
-    actual = extract_command_output(response, 'py-list 4 11')
+    )[-1]
+    actual = response.rstrip()
 
     assert actual == expected
 
 
-def test_non_default_encoding():
+def test_non_default_encoding(lldb):
     head = u'# coding: cp1251'
     code = (head + '\n\n' + CODE).encode('cp1251')
 
@@ -107,18 +110,19 @@ def test_non_default_encoding():
    10    
    11    def fb():
    12        1 + 1
-'''
+'''.rstrip()
     response = run_lldb(
+        lldb,
         code=code,
         breakpoint='builtin_abs',
         commands=['py-list'],
-    )
-    actual = extract_command_output(response, 'py-list')
+    )[-1]
+    actual = response.rstrip()
 
     assert actual == expected
 
 
-def test_not_the_most_recent_frame():
+def test_not_the_most_recent_frame(lldb):
     expected = u'''\
     6        return 1
     7    
@@ -131,12 +135,13 @@ def test_not_the_most_recent_frame():
    14    def fc():
    15        fb()
    16    
-'''
+'''.rstrip()
     response = run_lldb(
+        lldb,
         code=CODE,
         breakpoint='builtin_abs',
         commands=['py-up', 'py-list'],
-    )
-    actual = extract_command_output(response, 'py-list')
+    )[-1]
+    actual = response.rstrip()
 
     assert actual == expected
