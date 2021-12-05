@@ -755,7 +755,11 @@ class Command(object):
             args = self.argument_parser.parse_args(shlex.split(command))
             self.execute(debugger, args, result)
         except Exception as e:
-            result.SetError(u'Failed to execute command `{}`: {}'.format(self.command, e))
+            msg = u'Failed to execute command `{}`: {}'.format(self.command, e)
+            if six.PY2:
+                msg = msg.encode('utf-8')
+
+            result.SetError(msg)
 
     @property
     def argument_parser(self):

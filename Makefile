@@ -1,6 +1,7 @@
 PY_VERSION ?= 3.10
 LLDB_VERSION ?= 11
 DOCKER_IMAGE_TAG = $(PY_VERSION)-lldb$(LLDB_VERSION)
+CONCURRENCY ?= 8
 
 # older LLVM versions are not packaged for Debian Bullseye, which is the new stable
 # used in Python Docker images. We can fall back to Buster images for testing those
@@ -23,4 +24,4 @@ test: build-image
 		--security-opt seccomp:unconfined --cap-add=SYS_PTRACE \
 		-e PYTHONHASHSEED=1 \
 		cpython-lldb:$(DOCKER_IMAGE_TAG) \
-		bash -c "cd /root/.lldb/cpython-lldb && poetry run pytest -n 4 -vv tests/ -m 'not serial' && poetry run pytest -n 0 -vv tests/ -m 'serial'"
+		bash -c "cd /root/.lldb/cpython-lldb && poetry run pytest -n $(CONCURRENCY) -vv tests/"

@@ -35,5 +35,7 @@ jobs:
         env:
           PY_VERSION: ${{ matrix.py_version }}
           LLDB_VERSION: ${{ matrix.lldb_version }}
+          # runner only has a single CPU core, so there is no sense in trying to put more load on it
+          CONCURRENCY: 2
         run: |
           make test
