@@ -1,6 +1,8 @@
 Overview
 ========
 
+![build status](https://github.com/malor/cpython-lldb/actions/workflows/tests.yml/badge.svg)
+
 `cpython_lldb` is an LLDB extension for debugging Python programs.
 
 It may be useful for troubleshooting stuck threads and crashes in the interpreter,
