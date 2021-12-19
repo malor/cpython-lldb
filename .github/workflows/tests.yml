@@ -4,6 +4,9 @@ on:
     ranches: [ master ]
   pull_request:
     branches: [ master ]
+  schedule:
+    # run daily. The exact time does not matter; just try to avoid popular times like midnight
+    - cron: '17 5 * * *'
 
 defaults:
   run:
