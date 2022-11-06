@@ -12,6 +12,7 @@ import six
 
 
 ENCODING_RE = re.compile(r'^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)')
+EVAL_FRAME_FUNCTIONS = ('_PyEval_EvalFrameDefault', 'PyEval_EvalFrameEx')
 
 
 # Objects
@@ -532,6 +533,14 @@ class PyCodeObject(PyObject):
 
     typename = 'code'
 
+    @property
+    def filename(self):
+        return PyObject.from_value(self.child('co_filename')).value
+
+    @property
+    def co_name(self):
+        return PyObject.from_value(self.child('co_name')).value
+
     def addr2line(self, f_lineno, f_lasti):
         addr_range_type = self.target.FindFirstType('PyCodeAddressRange')
         if addr_range_type.IsValid():
@@ -662,7 +671,7 @@ class PyFrameObject(PyObject):
             return None
 
         # check if we are in a potential function
-        if frame.name not in ('_PyEval_EvalFrameDefault', 'PyEval_EvalFrameEx'):
+        if frame.name not in EVAL_FRAME_FUNCTIONS:
             return None
 
         # try different methods of getting PyFrameObject before giving up
@@ -697,7 +706,7 @@ class PyFrameObject(PyObject):
 
     @property
     def filename(self):
-        return PyObject.from_value(self.co.child('co_filename')).value
+        return self.co.filename
 
     @property
     def line_number(self):
@@ -717,14 +726,104 @@ class PyFrameObject(PyObject):
             return u'<source code is not available>'
 
     def to_pythonlike_string(self):
-        lineno = self.line_number
-        co_name = PyObject.from_value(self.co.child('co_name')).value
         return u'File "{filename}", line {lineno}, in {co_name}'.format(
             filename=self.filename,
-            co_name=co_name,
-            lineno=lineno,
+            co_name=self.co.co_name,
+            lineno=self.line_number,
         )
 
+
+class PyInterpreterFrame(object):
+
+    def __init__(self, lldb_value):
+        self.lldb_value = lldb_value
+
+    def to_pythonlike_string(self):
+        f_code = PyCodeObject(self.lldb_value.GetChildMemberWithName('f_code'))
+
+        return u'File "{filename}", in {co_name}'.format(
+            filename=f_code.filename,
+            co_name=f_code.co_name
+        )
+
+    @property
+    def line(self):
+        return ''
+
+
+class PyCFrame(object):
+
+    def __init__(self, lldb_value):
+        self.lldb_value = lldb_value
+
+    @classmethod
+    def from_frame(cls, frame):
+        # check if we are in a potential function
+        if frame.name not in EVAL_FRAME_FUNCTIONS:
+            return None
+
+        # ideally, debugging symbols will just point us to the location of the Python call stack
+        cframe = frame.variables['cframe']
+        if cframe and is_available(cframe[0]):
+            return cframe
+
+        # if that information is somehow missing, we can use heuristic to locate PyCFrame
+        target = frame.GetThread().GetProcess().GetTarget()
+        cframe_type = target.FindFirstType('_PyCFrame')
+        object_type = target.FindFirstType('PyObject')
+
+        def maybe_cframe(sbvalue):
+            if sbvalue.type == cframe_type:
+                maybe_frame = sbvalue
+            elif sbvalue.unsigned:
+                maybe_frame = sbvalue.Cast(cframe_type.GetPointerType())
+            else:
+                return None
+
+            maybe_code = maybe_frame.GetChildMemberWithName('current_frame') \
+                                    .GetChildMemberWithName('f_code') \
+                                    .Cast(object_type.GetPointerType())
+
+            pyobject = PyObject(maybe_code)
+            if pyobject.typename == PyCodeObject.typename:
+                return cls(sbvalue)
+
+        # first, we try general purpose registers
+        for register in general_purpose_registers(frame):
+            cframe = maybe_cframe(frame.register[register])
+            if cframe is not None:
+                return cframe
+
+        # if we haven't managed to find PyCFrame that way, we resort to scanning the stack
+        for offset in range(0x0, 0xff, target.GetAddressByteSize()):
+            address = lldb.SBAddress(frame.sp + offset, target)
+            cframe = maybe_cframe(target.CreateValueFromAddress('cframe', address, cframe_type))
+            if cframe is not None:
+                return cframe
+
+    @classmethod
+    def get_pystack(cls, thread):
+        pyframes = []
+
+        cframe = cls._locate_cframe(thread)
+        if cframe is not None:
+            frame = cframe.lldb_value.GetChildMemberWithName('current_frame')
+            while frame.IsValid() and frame.unsigned:
+                pyframes.append(PyInterpreterFrame(frame))
+
+                frame = frame.GetChildMemberWithName('previous')
+
+        return pyframes
+
+    @classmethod
+    def _locate_cframe(cls, thread):
+        frame = thread.GetSelectedFrame()
+        while frame:
+            cframe = cls.from_frame(frame)
+            if cframe is not None:
+                return cframe
+
+            frame = frame.get_parent_frame()
 
 # Commands
 
@@ -814,7 +913,7 @@ class PyBt(Command):
         target = debugger.GetSelectedTarget()
         thread = target.GetProcess().GetSelectedThread()
 
-        pystack = PyFrameObject.get_pystack(thread)
+        pystack = PyFrameObject.get_pystack(thread) or PyCFrame.get_pystack(thread)
 
         lines = []
         for pyframe in reversed(pystack):
