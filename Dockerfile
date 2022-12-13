@@ -20,7 +20,7 @@ RUN if [ "${LLDB_VERSION}" = "9" ]; then \
 
 ENV PYTHONPATH /usr/lib/llvm-${LLDB_VERSION}/lib/python3/dist-packages
 
-RUN python -m pip install poetry==1.1.8
+RUN python -m pip install poetry
 
 COPY . /root/.lldb/cpython-lldb
 RUN cd /root/.lldb/cpython-lldb && \

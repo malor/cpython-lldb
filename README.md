@@ -331,8 +331,6 @@ $ PY_VERSION=X.Y LLDB_VERSION=Z make test
 ```
 
 Supported CPython versions are:
-* `3.5`
-* `3.6`
 * `3.7`
 * `3.8`
 * `3.9`
