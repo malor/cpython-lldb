@@ -63,6 +63,28 @@ $ echo "command script import ~/.lldb/cpython_lldb/cpython_lldb.py" >> ~/.lldbin
 $ chmod +x ~/.lldbinit
 ```
 
+MacOS
+-----
+LLDB bundled with MacOS is linked with the system version of CPython which may not even
+be in your PATH. To locate the right version of the interpreter, use:
+```shell
+$ lldb --print-script-interpreter-info
+```
+The output of the command above is a JSON with the following structure:
+```
+{
+  "executable":"/Library/.../Python3.framework/Versions/3.9/bin/python3",
+  "language":"python",
+  "lldb-pythonpath":"/Library/.../LLDB.framework/Resources/Python",
+  "prefix":"/Library/.../Python3.framework/Versions/3.9"
+}
+```
+Where the value for "executable" is the CPython version that should be used to install
+cpython_lldb for LLDB to be able to successfully import the script:
+```shell
+$(lldb --print-script-interpreter-info | jq -r .executable) -m pip install cpython_lldb
+```
+
 Usage
 =====
 
@@ -276,36 +298,6 @@ Python Interactive Interpreter. To exit, type 'quit()', 'exit()' or Ctrl-D.
 
 It's recommended that you use the latest LLDB release from the official [APT repo](https://apt.llvm.org/) instead
 of the one shipped with your distro.
-
-Conflicting Python versions on Mac OS
--------------------------------------
-
-If you see an error like this:
-
-```
-Traceback (most recent call last):
-  File "<input>", line 1, in <module>
-  File "/usr/local/Cellar/python/2.7.13/Frameworks/Python.framework/Versions/2.7/lib/python2.7/io.py", line 51, in <module>
-    import _io
-ImportError: dlopen(/usr/local/Cellar/python/2.7.13/Frameworks/Python.framework/Versions/2.7/lib/python2.7/lib-dynload/_io.so, 2): Symbol not found: __PyCodecInfo_GetIncrementalDecoder
-  Referenced from: /usr/local/Cellar/python/2.7.13/Frameworks/Python.framework/Versions/2.7/lib/python2.7/lib-dynload/_io.so
-  Expected in: flat namespace
- in /usr/local/Cellar/python/2.7.13/Frameworks/Python.framework/Versions/2.7/lib/python2.7/lib-dynload/_io.so
-```
-
-then the version of LLDB, that is shipped with Mac OS and linked against the system CPython,
-is trying to use CPython installed via Homebrew. This won't work. You need to make sure LLDB
-picks up the correct CPython version on start. One way to achieve that would be modifying
-`$PATH`, e.g. by creating a wrapper for `lldb`:
-
-```
-#!/bin/sh
-
-export PATH=/usr/bin:$PATH
-exec lldb "$@"
-```
-
-and putting it to `/usr/local/bin`.
 
 See this [page](https://github.com/vadimcn/vscode-lldb/wiki/Troubleshooting) for advice on
 troubleshooting of LLDB.
