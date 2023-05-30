@@ -28,6 +28,7 @@ def lldb_session(tmpdir_factory):
         timeout=6,
         maxread=65536,
         env={
+            'PYTHONDONTWRITEBYTECODE': 'true',
             'PYTHONPATH': os.environ.get('PYTHONPATH', ''),
             'PYTHONHASHSEED': os.environ.get('PYTHONHASHSEED', '1'),
             'LANG': os.environ.get('LANG'),
@@ -61,6 +62,7 @@ def lldb_no_symbols_session(tmpdir_factory):
         timeout=6,
         maxread=65536,
         env={
+            'PYTHONDONTWRITEBYTECODE': 'true',
             'PYTHONPATH': os.environ.get('PYTHONPATH', ''),
             'PYTHONHASHSEED': os.environ.get('PYTHONHASHSEED', '1'),
             'LD_LIBRARY_PATH': '.',
