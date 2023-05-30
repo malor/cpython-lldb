@@ -24,7 +24,7 @@ test: build-image
 		--security-opt seccomp:unconfined --cap-add=SYS_PTRACE \
 		-e PYTHONHASHSEED=1 \
 		cpython-lldb:$(DOCKER_IMAGE_TAG) \
-		bash -c "cd /root/.lldb/cpython-lldb && poetry run pytest -n auto -vv tests/"
+		bash -c "ulimit -n 1024 && cd /root/.lldb/cpython-lldb && poetry run pytest -n auto -vv tests/"
 
 # Run tests serially and start a pdb session when a test fails
 debug: build-image
@@ -33,7 +33,7 @@ debug: build-image
 		--security-opt seccomp:unconfined --cap-add=SYS_PTRACE \
 		-e PYTHONHASHSEED=1 \
 		cpython-lldb:$(DOCKER_IMAGE_TAG) \
-		bash -c "cd /root/.lldb/cpython-lldb && poetry run pytest -s -n auto -vv --pdb -x --ff tests/"
+		bash -c "ulimit -n 1024 && cd /root/.lldb/cpython-lldb && poetry run pytest -s -n auto -vv --pdb -x --ff tests/"
 
 # Start a shell in a container with cpython-lldb installed
 shell: build-image

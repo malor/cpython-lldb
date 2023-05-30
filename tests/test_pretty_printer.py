@@ -27,7 +27,7 @@ def lldb_repr_from_frame(lldb_manager, value):
 
 
 def lldb_repr_from_register(lldb_manager, value):
-        # same as lldb_repr_from_frame(), but also works in cases when the CPython
+    # same as lldb_repr_from_frame(), but also works in cases when the CPython
     # build does not provide information on the arguments of builtin_id():
     # here we use the fact that the value of `v` argument is passed in the
     # CPU register RSI according to the rules of AMD64 calling convention
