@@ -17,6 +17,8 @@ jobs:
 
     permissions:
       id-token: write
+      contents: write
+      packages: write
 
     steps:
       - uses: actions/checkout@v3
