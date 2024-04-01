@@ -2,11 +2,14 @@ PY_VERSION ?= 3.10
 LLDB_VERSION ?= 11
 DOCKER_IMAGE_TAG = $(PY_VERSION)-lldb$(LLDB_VERSION)
 
-# older LLVM versions are not packaged for Debian Bullseye, which is the new stable
-# used in Python Docker images. We can fall back to Buster images for testing those
 ifeq ($(shell test $(LLDB_VERSION) -lt 11 && echo true), true)
+	# LLVM >= 7: https://apt.llvm.org/buster/pool/main/l/
 	PY_DISTRO = $(PY_VERSION)-buster
+else ifeq ($(shell test $(LLDB_VERSION) -lt 15 && echo true), true)
+	# LLVM >= 11: https://apt.llvm.org/bullseye/pool/main/l/
+	PY_DISTRO = $(PY_VERSION)-bullseye
 else
+	# LLVM >= 15
 	PY_DISTRO = $(PY_VERSION)
 endif
 
