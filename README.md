@@ -329,8 +329,6 @@ Supported CPython versions are:
 * `3.10`
 
 Supported LLDB versions:
-* `7`
-* `8`
 * `9`
 * `10`
 * `11`
