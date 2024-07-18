@@ -1,7 +1,7 @@
 ARG PY_VERSION=latest
 FROM python:${PY_VERSION}
 
-ARG LLDB_VERSION=11
+ARG LLDB_VERSION=16
 
 RUN DEBIAN_VERSION=`awk -F"[)(]+" '/VERSION=/ {print $2}' /etc/os-release` && \
     wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
