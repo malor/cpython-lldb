@@ -13,10 +13,7 @@ RUN if [ "${LLDB_VERSION}" = "9" ]; then \
         # The deb package is missing this symlink; lldb won't work w/o it
         ln -s /usr/lib/llvm-9/bin/lldb-server-9 /usr/lib/llvm-9/bin/lldb-server-9.0.1; \
     fi && \
-    if [ "${LLDB_VERSION}" != "7" ]; then \
-        # In newer versions support for Python scripting is provided via a separate package
-        apt-get install -y python3-lldb-${LLDB_VERSION}; \
-    fi
+    apt-get install -y python3-lldb-${LLDB_VERSION}
 
 ENV PYTHONPATH /usr/lib/llvm-${LLDB_VERSION}/lib/python3/dist-packages
 
