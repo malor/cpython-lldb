@@ -25,6 +25,8 @@ jobs:
           - '9'
           - '10'
           - '11'
+          - '15'
+          - '16'
 
     runs-on: ubuntu-latest
 
