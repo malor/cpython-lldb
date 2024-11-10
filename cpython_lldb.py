@@ -741,7 +741,7 @@ class Command(object):
 
     def __init__(self, debugger, unused):
         # using this instance of Debugger crashes LLDB. But commands receive a
-        # working instance on every invokation, so we don't really need it
+        # working instance on every invocation, so we don't really need it
         pass
 
     def get_short_help(self):
@@ -898,7 +898,7 @@ class PyList(Command):
         filename = current_frame.filename
         current_line_num = current_frame.line_number
 
-        # default to showing the context around the current line, unless overriden
+        # default to showing the context around the current line, unless overridden
         start, end = PyList.linenum_range(current_line_num, linenum_range)
         try:
             encoding = source_file_encoding(filename)
