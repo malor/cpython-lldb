@@ -11,7 +11,7 @@ running process without instrumenting it in advance, as well as loading a proces
 coredump to perform an offline (or post-mortem) analysis of a problem.
 
 When analyzing the state of a Python process, normally you would only have
-access to *intepreter-level* information: most variables would be of type
+access to *interpreter-level* information: most variables would be of type
 `PyObject*`, and stack traces would only contain CPython internal calls and
 calls to library functions. Unless you are a CPython developer troubleshooting
 the interpreter implementation, that is typically not very useful. This extension,
@@ -35,7 +35,7 @@ Features
 
 `cpython_lldb` targets CPython 3.5+ and supports the following features:
 
-* pretty-priting of built-in types (int, bool, float, bytes, str, none, tuple, list, set, frozenset, dict)
+* pretty-printing of built-in types (int, bool, float, bytes, str, none, tuple, list, set, frozenset, dict)
 * printing of Python-level stack traces
 * printing of local variables
 * listing the source code
