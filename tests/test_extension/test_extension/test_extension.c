@@ -51,9 +51,26 @@ static PyObject* eggs(PyObject* self, PyObject* args, PyObject* kwargs) {
     return PyObject_CallObject(f, argslist);
 }
 
+// Helper functions for testing pretty-printing of Python objects. The problem
+// with using functions built into CPython (e.g. id()) is that breakpoints may
+// not trigger if such function is inlined. And with this C-extension we have
+// full control of the compiler options and can disable optimizations.
+static PyObject* _identity(PyObject* v) {
+    return v;
+}
+static PyObject* identity(PyObject* self, PyObject* args) {
+    PyObject* v = NULL;
+    if (!PyArg_ParseTuple(args, "O", &v) || v == NULL) {
+        return NULL;
+    }
+
+    return _identity(v);
+}
+
 static PyMethodDef methods[] = {
     { "spam", spam, METH_NOARGS, "Test Extension Function" },
     { "eggs", eggs, METH_VARARGS | METH_KEYWORDS, "Test Extension Function" },
+    { "identity", identity, METH_VARARGS, "Returns the passed value. Used in testing." },
     { NULL, NULL, 0, NULL }
 };
 
