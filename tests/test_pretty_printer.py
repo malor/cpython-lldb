@@ -1,18 +1,26 @@
 import collections
 import re
+import textwrap
 
 from .conftest import run_lldb
 
 
 def lldb_repr_from_frame(lldb_manager, value):
-    # set a breakpoint in the implementation of the builtin function id(), that
-    # is conveniently called with a single argument (v), which representation
-    # we are trying to scrape from the LLDB output. When the breakpoint is hit,
-    # the argument value will be pretty-printed by `frame info` command
+    # Set a breakpoint in the implementation of a function that is conveniently
+    # called with a single argument `v`, whose representation we are trying to
+    # scrape from the LLDB output. When the breakpoint is hit, the argument
+    # value will be pretty-printed by `frame info` command.
+    code = f'''
+        from collections import *
+        from six.moves import *
+
+        import test_extension
+        test_extension.identity({value})
+    '''
     response = run_lldb(
         lldb_manager,
-        code='from collections import *; from six.moves import *; id(%s)' % value,
-        breakpoint='builtin_id',
+        code=textwrap.dedent(code),
+        breakpoint='_identity',
         commands=['frame info'],
     )[-1]
 
@@ -26,30 +34,9 @@ def lldb_repr_from_frame(lldb_manager, value):
     return match
 
 
-def lldb_repr_from_register(lldb_manager, value):
-    # same as lldb_repr_from_frame(), but also works in cases when the CPython
-    # build does not provide information on the arguments of builtin_id():
-    # here we use the fact that the value of `v` argument is passed in the
-    # CPU register RSI according to the rules of AMD64 calling convention
-    response = run_lldb(
-        lldb_manager,
-        code='from collections import *; from six.moves import *; id(%s)' % value,
-        breakpoint='builtin_id',
-        commands=['print (PyObject*) $rsi'],
-    )[-1]
-    actual = [
-        line.strip()
-        for line in response.splitlines()
-        if '(PyObject *) $' in line
-    ][-1]
-    match = re.search(r'^\(PyObject \*\) \$[^=]+ = 0x[0-9a-f]+ (.*)$', actual)
-
-    return match
-
-
 def assert_lldb_repr(lldb_manager, value, expected, code_value=None):
     value_repr = code_value or repr(value)
-    match = lldb_repr_from_frame(lldb_manager, value_repr) or lldb_repr_from_register(lldb_manager, value_repr)
+    match = lldb_repr_from_frame(lldb_manager, value_repr)
     assert match is not None
 
     if isinstance(value, (set, frozenset, dict)):
