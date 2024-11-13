@@ -1,7 +1,7 @@
 from .conftest import run_lldb
 
 
-CODE = u'''
+CODE = """
 SOME_CONST = u'тест'
 
 
@@ -20,11 +20,11 @@ def fc():
 
 
 fc()
-'''.lstrip()
+""".lstrip()
 
 
 def test_up_down(lldb):
-    expected = u'''\
+    expected = """\
   File "test.py", line 11, in fb
     fa()
   File "test.py", line 15, in fc
@@ -37,33 +37,33 @@ def test_up_down(lldb):
     fa()
   File "test.py", line 15, in fc
     fb()
-'''.rstrip()
+""".rstrip()
     response = run_lldb(
         lldb,
         code=CODE,
-        breakpoint='builtin_abs',
-        commands=['py-up', 'py-up', 'py-up', 'py-down', 'py-down', 'py-up'],
+        breakpoint="builtin_abs",
+        commands=["py-up", "py-up", "py-up", "py-down", "py-down", "py-up"],
     )
-    actual = u''.join(response).rstrip()
+    actual = "".join(response).rstrip()
 
     assert actual == expected
 
 
 def test_newest_frame(lldb):
-    expected = u'*** Newest frame'
+    expected = "*** Newest frame"
     response = run_lldb(
         lldb,
         code=CODE,
-        breakpoint='builtin_abs',
-        commands=['py-down'],
+        breakpoint="builtin_abs",
+        commands=["py-down"],
     )
-    actual = u''.join(response).rstrip()
+    actual = "".join(response).rstrip()
 
     assert actual == expected
 
 
 def test_oldest_frame(lldb):
-    expected = u'''\
+    expected = """\
   File "test.py", line 11, in fb
     fa()
   File "test.py", line 15, in fc
@@ -71,13 +71,13 @@ def test_oldest_frame(lldb):
   File "test.py", line 18, in <module>
     fc()
 *** Oldest frame
-'''.rstrip()
+""".rstrip()
     response = run_lldb(
         lldb,
         code=CODE,
-        breakpoint='builtin_abs',
-        commands=['py-up'] * 4,
+        breakpoint="builtin_abs",
+        commands=["py-up"] * 4,
     )
-    actual = u''.join(response).rstrip()
+    actual = "".join(response).rstrip()
 
     assert actual == expected
