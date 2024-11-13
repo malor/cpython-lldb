@@ -1,7 +1,7 @@
 from .conftest import run_lldb
 
 
-CODE = u'''\
+CODE = """\
 def fa():
     abs(1)
 
@@ -21,12 +21,12 @@ def fc():
 
 
 fc()
-'''.lstrip()
+""".lstrip()
 
 
 def test_locals(lldb):
     # this could be replaced with a regex, but a plain string seems to be more readable
-    expected_py2 = u'''\
+    expected_py2 = """\
 a = 42
 args = (1, 2, 3)
 b = [1, u'hello', u'\\u0442\\u0435\\u0441\\u0442']
@@ -36,9 +36,9 @@ e = {u'a': -1}
 eggs = 42
 kwargs = {u'foo': 'spam'}
 spam = u'foobar'
-'''.rstrip()
+""".rstrip()
 
-    expected_py3 = u'''\
+    expected_py3 = """\
 a = 42
 args = (1, 2, 3)
 b = [1, 'hello', 'тест']
@@ -48,12 +48,12 @@ e = {'a': -1}
 eggs = 42
 kwargs = {'foo': b'spam'}
 spam = 'foobar'
-'''.rstrip()
+""".rstrip()
     response = run_lldb(
         lldb,
         code=CODE,
-        breakpoint='builtin_abs',
-        commands=['py-up', 'py-locals'],
+        breakpoint="builtin_abs",
+        commands=["py-up", "py-locals"],
     )[-1]
     actual = response.rstrip()
 
@@ -64,16 +64,24 @@ def test_globals(lldb):
     response = run_lldb(
         lldb,
         code=CODE,
-        breakpoint='builtin_abs',
-        commands=['py-up', 'py-up', 'py-up', 'py-locals'],
+        breakpoint="builtin_abs",
+        commands=["py-up", "py-up", "py-up", "py-locals"],
     )[-1]
     actual = response.rstrip()
 
-    actual_keys = set(line.split('=')[0].strip()
-                      for line in actual.split('\n') if line)
-    expected_keys = set(['__builtins__', '__package__',
-                         '__name__', '__doc__', '__file__',
-                         'fa', 'fb', 'fc'])
+    actual_keys = set(line.split("=")[0].strip() for line in actual.split("\n") if line)
+    expected_keys = set(
+        [
+            "__builtins__",
+            "__package__",
+            "__name__",
+            "__doc__",
+            "__file__",
+            "fa",
+            "fb",
+            "fc",
+        ]
+    )
     assert (expected_keys & actual_keys) == expected_keys
 
 
@@ -81,9 +89,9 @@ def test_no_locals(lldb):
     response = run_lldb(
         lldb,
         code=CODE,
-        breakpoint='builtin_abs',
-        commands=['py-locals'],
+        breakpoint="builtin_abs",
+        commands=["py-locals"],
     )[-1]
     actual = response.rstrip()
 
-    assert actual == u''
+    assert actual == ""

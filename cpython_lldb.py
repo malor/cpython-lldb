@@ -11,10 +11,11 @@ import lldb
 import six
 
 
-ENCODING_RE = re.compile(r'^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)')
+ENCODING_RE = re.compile(r"^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
 
 
 # Objects
+
 
 class PyObject(object):
     def __init__(self, lldb_value):
@@ -43,9 +44,11 @@ class PyObject(object):
     @staticmethod
     def typename_of(v):
         try:
-            addr = v.GetChildMemberWithName('ob_type') \
-                    .GetChildMemberWithName('tp_name') \
-                    .unsigned
+            addr = (
+                v.GetChildMemberWithName("ob_type")
+                .GetChildMemberWithName("tp_name")
+                .unsigned
+            )
             if not addr:
                 return
 
@@ -80,13 +83,12 @@ class PyObject(object):
 
 
 class PyLongObject(PyObject):
-
-    typename = 'int'
-    cpython_struct = 'PyLongObject'
+    typename = "int"
+    cpython_struct = "PyLongObject"
 
     @property
     def value(self):
-        '''
+        """
 
         The absolute value of a number is equal to:
 
@@ -100,76 +102,79 @@ class PyLongObject(PyObject):
         or:
             #define PyLong_SHIFT        15
 
-        '''
+        """
 
         long_type = self.target.FindFirstType(self.cpython_struct)
-        digit_type = self.target.FindFirstType('digit')
+        digit_type = self.target.FindFirstType("digit")
 
         shift = 15 if digit_type.size == 2 else 30
         value = self.deref.Cast(long_type)
-        size = value.GetChildMemberWithName('ob_base') \
-                    .GetChildMemberWithName('ob_size') \
-                    .signed
+        size = (
+            value.GetChildMemberWithName("ob_base")
+            .GetChildMemberWithName("ob_size")
+            .signed
+        )
         if not size:
             return 0
 
-        digits = value.GetChildMemberWithName('ob_digit')
+        digits = value.GetChildMemberWithName("ob_digit")
         abs_value = sum(
-            digits.GetChildAtIndex(i, 0, True).unsigned  * 2 ** (shift * i)
+            digits.GetChildAtIndex(i, 0, True).unsigned * 2 ** (shift * i)
             for i in range(0, abs(size))
         )
         return abs_value if size > 0 else -abs_value
 
 
 class PyBoolObject(PyObject):
-
-    typename = 'bool'
+    typename = "bool"
 
     @property
     def value(self):
-        long_type = self.target.FindFirstType('PyLongObject')
+        long_type = self.target.FindFirstType("PyLongObject")
 
         value = self.deref.Cast(long_type)
-        digits = value.GetChildMemberWithName('ob_digit')
+        digits = value.GetChildMemberWithName("ob_digit")
         return bool(digits.GetChildAtIndex(0).unsigned)
 
 
 class PyFloatObject(PyObject):
-
-    typename = 'float'
-    cpython_struct = 'PyFloatObject'
+    typename = "float"
+    cpython_struct = "PyFloatObject"
 
     @property
     def value(self):
         float_type = self.target.FindFirstType(self.cpython_struct)
 
         value = self.deref.Cast(float_type)
-        fval = value.GetChildMemberWithName('ob_fval')
+        fval = value.GetChildMemberWithName("ob_fval")
         return float(fval.GetValue())
 
 
 class PyBytesObject(PyObject):
-
-    typename = 'bytes'
-    cpython_struct = 'PyBytesObject'
+    typename = "bytes"
+    cpython_struct = "PyBytesObject"
 
     @property
     def value(self):
         bytes_type = self.target.FindFirstType(self.cpython_struct)
 
         value = self.deref.Cast(bytes_type)
-        size = value.GetChildMemberWithName('ob_base') \
-                    .GetChildMemberWithName('ob_size') \
-                    .unsigned
-        addr = value.GetChildMemberWithName('ob_sval').GetLoadAddress()
+        size = (
+            value.GetChildMemberWithName("ob_base")
+            .GetChildMemberWithName("ob_size")
+            .unsigned
+        )
+        addr = value.GetChildMemberWithName("ob_sval").GetLoadAddress()
 
-        return bytes(self.process.ReadMemory(addr, size, lldb.SBError())) if size else b''
+        if size:
+            return bytes(self.process.ReadMemory(addr, size, lldb.SBError()))
+        else:
+            return b""
 
 
 class PyUnicodeObject(PyObject):
-
-    typename = 'str'
-    cpython_struct = 'PyUnicodeObject'
+    typename = "str"
+    cpython_struct = "PyUnicodeObject"
 
     U_WCHAR_KIND = 0
     U_1BYTE_KIND = 1
@@ -181,76 +186,78 @@ class PyUnicodeObject(PyObject):
         str_type = self.target.FindFirstType(self.cpython_struct)
 
         value = self.deref.Cast(str_type)
-        state = value.GetChildMemberWithName('_base') \
-                     .GetChildMemberWithName('_base') \
-                     .GetChildMemberWithName('state')
-        length = value.GetChildMemberWithName('_base') \
-                      .GetChildMemberWithName('_base') \
-                      .GetChildMemberWithName('length') \
-                      .unsigned
+        state = (
+            value.GetChildMemberWithName("_base")
+            .GetChildMemberWithName("_base")
+            .GetChildMemberWithName("state")
+        )
+        length = (
+            value.GetChildMemberWithName("_base")
+            .GetChildMemberWithName("_base")
+            .GetChildMemberWithName("length")
+            .unsigned
+        )
         if not length:
-            return u''
+            return ""
 
-        compact = bool(state.GetChildMemberWithName('compact').unsigned)
-        is_ascii = bool(state.GetChildMemberWithName('ascii').unsigned)
-        kind = state.GetChildMemberWithName('kind').unsigned
-        ready = bool(state.GetChildMemberWithName('ready').unsigned)
+        compact = bool(state.GetChildMemberWithName("compact").unsigned)
+        is_ascii = bool(state.GetChildMemberWithName("ascii").unsigned)
+        kind = state.GetChildMemberWithName("kind").unsigned
+        ready = bool(state.GetChildMemberWithName("ready").unsigned)
 
         if is_ascii and compact and ready:
             # content is stored right after the data structure in memory
-            ascii_type = self.target.FindFirstType('PyASCIIObject')
+            ascii_type = self.target.FindFirstType("PyASCIIObject")
             value = value.Cast(ascii_type)
             addr = int(value.location, 16) + value.size
 
             rv = self.process.ReadMemory(addr, length, lldb.SBError())
-            return rv.decode('ascii')
+            return rv.decode("ascii")
         elif compact and ready:
             # content is stored right after the data structure in memory
-            compact_type = self.target.FindFirstType('PyCompactUnicodeObject')
+            compact_type = self.target.FindFirstType("PyCompactUnicodeObject")
             value = value.Cast(compact_type)
             addr = int(value.location, 16) + value.size
 
             rv = self.process.ReadMemory(addr, length * kind, lldb.SBError())
             if kind == self.U_1BYTE_KIND:
-                return rv.decode('latin-1')
+                return rv.decode("latin-1")
             elif kind == self.U_2BYTE_KIND:
-                return rv.decode('utf-16')
+                return rv.decode("utf-16")
             elif kind == self.U_4BYTE_KIND:
-                return rv.decode('utf-32')
+                return rv.decode("utf-32")
             else:
-                raise ValueError('Unsupported PyUnicodeObject kind: {}'.format(kind))
+                raise ValueError("Unsupported PyUnicodeObject kind: {}".format(kind))
         else:
             # TODO: add support for legacy unicode strings
-            raise ValueError('Unsupported PyUnicodeObject kind: {}'.format(kind))
+            raise ValueError("Unsupported PyUnicodeObject kind: {}".format(kind))
 
 
 class PyNoneObject(PyObject):
-
-    typename = 'NoneType'
+    typename = "NoneType"
     value = None
 
 
 class _PySequence(object):
-
     @property
     def value(self):
         value = self.deref.Cast(self.lldb_type)
-        size = value.GetChildMemberWithName('ob_base') \
-                    .GetChildMemberWithName('ob_size') \
-                    .signed
-        items = value.GetChildMemberWithName('ob_item')
+        size = (
+            value.GetChildMemberWithName("ob_base")
+            .GetChildMemberWithName("ob_size")
+            .signed
+        )
+        items = value.GetChildMemberWithName("ob_item")
 
         return self.python_type(
-            PyObject.from_value(items.GetChildAtIndex(i, 0, True))
-            for i in range(size)
+            PyObject.from_value(items.GetChildAtIndex(i, 0, True)) for i in range(size)
         )
 
 
 class PyListObject(_PySequence, PyObject):
-
     python_type = list
-    typename = 'list'
-    cpython_struct = 'PyListObject'
+    typename = "list"
+    cpython_struct = "PyListObject"
 
     @property
     def lldb_type(self):
@@ -258,10 +265,9 @@ class PyListObject(_PySequence, PyObject):
 
 
 class PyTupleObject(_PySequence, PyObject):
-
     python_type = tuple
-    typename = 'tuple'
-    cpython_struct = 'PyTupleObject'
+    typename = "tuple"
+    cpython_struct = "PyTupleObject"
 
     @property
     def lldb_type(self):
@@ -269,25 +275,22 @@ class PyTupleObject(_PySequence, PyObject):
 
 
 class _PySetObject(object):
-
-    cpython_struct = 'PySetObject'
+    cpython_struct = "PySetObject"
 
     @property
     def value(self):
         set_type = self.target.FindFirstType(self.cpython_struct)
 
         value = self.deref.Cast(set_type)
-        size = value.GetChildMemberWithName('mask').unsigned + 1
-        table = value.GetChildMemberWithName('table')
-        array = table.deref.Cast(
-            table.type.GetPointeeType().GetArrayType(size)
-        )
+        size = value.GetChildMemberWithName("mask").unsigned + 1
+        table = value.GetChildMemberWithName("table")
+        array = table.deref.Cast(table.type.GetPointeeType().GetArrayType(size))
 
         rv = set()
         for i in range(size):
             entry = array.GetChildAtIndex(i)
-            key = entry.GetChildMemberWithName('key')
-            hash_ = entry.GetChildMemberWithName('hash').signed
+            key = entry.GetChildMemberWithName("key")
+            hash_ = entry.GetChildMemberWithName("hash").signed
 
             # filter out 'dummy' and 'unused' slots
             if hash_ != -1 and (hash_ != 0 or key.unsigned != 0):
@@ -297,13 +300,11 @@ class _PySetObject(object):
 
 
 class PySetObject(_PySetObject, PyObject):
-
-    typename = 'set'
+    typename = "set"
 
 
 class PyFrozenSetObject(_PySetObject, PyObject):
-
-    typename = 'frozenset'
+    typename = "frozenset"
 
     @property
     def value(self):
@@ -311,28 +312,27 @@ class PyFrozenSetObject(_PySetObject, PyObject):
 
 
 class _PyDictObject(object):
-
     @property
     def value(self):
-        byte_type = self.target.FindFirstType('char')
-        dict_type = self.target.FindFirstType('PyDictObject')
-        dictentry_type = self.target.FindFirstType('PyDictKeyEntry')
-        object_type = self.target.FindFirstType('PyObject')
+        byte_type = self.target.FindFirstType("char")
+        dict_type = self.target.FindFirstType("PyDictObject")
+        dictentry_type = self.target.FindFirstType("PyDictKeyEntry")
+        object_type = self.target.FindFirstType("PyObject")
 
         value = self.deref.Cast(dict_type)
 
-        ma_keys = value.GetChildMemberWithName('ma_keys')
-        table_size = ma_keys.GetChildMemberWithName('dk_size').unsigned
-        num_entries = ma_keys.GetChildMemberWithName('dk_nentries').unsigned
+        ma_keys = value.GetChildMemberWithName("ma_keys")
+        table_size = ma_keys.GetChildMemberWithName("dk_size").unsigned
+        num_entries = ma_keys.GetChildMemberWithName("dk_nentries").unsigned
 
         # hash table effectively stores indexes of entries in the key/value
         # pairs array; the size of an index varies, so that all possible
         # array positions can be addressed
-        if table_size < 0xff:
+        if table_size < 0xFF:
             index_size = 1
-        elif table_size < 0xffff:
+        elif table_size < 0xFFFF:
             index_size = 2
-        elif table_size < 0xfffffff:
+        elif table_size < 0xFFFFFFF:
             index_size = 4
         else:
             index_size = 8
@@ -342,30 +342,34 @@ class _PyDictObject(object):
         if indices.IsValid():
             # CPython version >= 3.6
             # entries are stored in an array right after the indexes table
-            entries = indices.Cast(byte_type.GetArrayType(shift)) \
-                             .GetChildAtIndex(shift, 0, True) \
-                             .AddressOf() \
-                             .Cast(dictentry_type.GetPointerType()) \
-                             .deref \
-                             .Cast(dictentry_type.GetArrayType(num_entries))
+            entries = (
+                indices.Cast(byte_type.GetArrayType(shift))
+                .GetChildAtIndex(shift, 0, True)
+                .AddressOf()
+                .Cast(dictentry_type.GetPointerType())
+                .deref.Cast(dictentry_type.GetArrayType(num_entries))
+            )
         else:
             # CPython version < 3.6
             num_entries = table_size
-            entries = ma_keys.GetChildMemberWithName("dk_entries") \
-                             .Cast(dictentry_type.GetArrayType(num_entries))
+            entries = ma_keys.GetChildMemberWithName("dk_entries").Cast(
+                dictentry_type.GetArrayType(num_entries)
+            )
 
-        ma_values = value.GetChildMemberWithName('ma_values')
+        ma_values = value.GetChildMemberWithName("ma_values")
         if ma_values.unsigned:
             is_split = True
-            ma_values = ma_values.deref.Cast(object_type.GetPointerType().GetArrayType(num_entries))
+            ma_values = ma_values.deref.Cast(
+                object_type.GetPointerType().GetArrayType(num_entries)
+            )
         else:
             is_split = False
 
         rv = self.python_type()
         for i in range(num_entries):
             entry = entries.GetChildAtIndex(i)
-            k = entry.GetChildMemberWithName('me_key')
-            v = entry.GetChildMemberWithName('me_value')
+            k = entry.GetChildMemberWithName("me_key")
+            v = entry.GetChildMemberWithName("me_value")
             if k.unsigned != 0 and v.unsigned != 0:
                 # hash table is "combined"; keys and values are stored together
                 rv[PyObject.from_value(k)] = PyObject.from_value(v)
@@ -381,74 +385,69 @@ class _PyDictObject(object):
 
 
 class PyDictObject(_PyDictObject, PyObject):
-
     python_type = dict
-    typename = 'dict'
-    cpython_struct = 'PyDictObject'
+    typename = "dict"
+    cpython_struct = "PyDictObject"
 
 
 class Counter(_PyDictObject, PyObject):
-
     python_type = collections.Counter
-    typename = 'Counter'
+    typename = "Counter"
 
 
 class OrderedDict(_PyDictObject, PyObject):
-
     python_type = collections.OrderedDict
-    typename = 'collections.OrderedDict'
+    typename = "collections.OrderedDict"
 
 
 class Defaultdict(PyObject):
-
-    typename = 'collections.defaultdict'
-    cpython_struct = 'defdictobject'
+    typename = "collections.defaultdict"
+    cpython_struct = "defdictobject"
 
     @property
     def value(self):
-        dict_type = self.target.FindFirstType('defdictobject')
+        dict_type = self.target.FindFirstType("defdictobject")
         value = self.deref.Cast(dict_type)
         # for the time being, let's just convert it to a regular dict,
         # as we can't properly display the repr of the default_factory
         # anyway, because in order to do that we would need to execute
         # code within the context of the inferior process
-        return PyDictObject(value.GetChildMemberWithName('dict').AddressOf()).value
+        return PyDictObject(value.GetChildMemberWithName("dict").AddressOf()).value
 
 
 class _CollectionsUserObject(object):
-
     @property
     def value(self):
-        dict_offset = self.lldb_value.GetChildMemberWithName('ob_type') \
-                                     .GetChildMemberWithName('tp_dictoffset') \
-                                     .unsigned
+        dict_offset = (
+            self.lldb_value.GetChildMemberWithName("ob_type")
+            .GetChildMemberWithName("tp_dictoffset")
+            .unsigned
+        )
 
-        object_type = self.target.FindFirstType('PyObject')
-        address = lldb.SBAddress(int(self.lldb_value.value, 16) + dict_offset,
-                                 self.target)
-        value = self.target.CreateValueFromAddress('value', address,
-                                                   object_type.GetPointerType())
+        object_type = self.target.FindFirstType("PyObject")
+        address = lldb.SBAddress(
+            int(self.lldb_value.value, 16) + dict_offset, self.target
+        )
+        value = self.target.CreateValueFromAddress(
+            "value", address, object_type.GetPointerType()
+        )
 
         # "data" is the real object used to store the contents of the class
         return next(
-            v for k, v in PyDictObject(value).value.items()
-            if k.value == 'data'
+            v for k, v in PyDictObject(value).value.items() if k.value == "data"
         )
 
 
 class UserDict(_CollectionsUserObject, PyObject):
-
-    typename = 'UserDict'
+    typename = "UserDict"
 
 
 class UserList(_CollectionsUserObject, PyObject):
-
-    typename = 'UserList'
+    typename = "UserList"
 
 
 class UserString(_CollectionsUserObject, PyObject):
-
-    typename = 'UserString'
+    typename = "UserString"
 
 
 class PyCodeAddressRange(object):
@@ -501,9 +500,13 @@ class PyCodeAddressRange(object):
 
     def _advance(self):
         self.ar_start = self.ar_end
-        delta = struct.unpack('B', self.co_linetable[self.lo_next:self.lo_next + 1])[0]
+        delta = struct.unpack("B", self.co_linetable[self.lo_next : self.lo_next + 1])[
+            0
+        ]
         self.ar_end += delta
-        ldelta = struct.unpack('b', self.co_linetable[self.lo_next + 1:self.lo_next + 2])[0]
+        ldelta = struct.unpack(
+            "b", self.co_linetable[self.lo_next + 1 : self.lo_next + 2]
+        )[0]
         self.lo_next += 2
 
         if ldelta == -128:
@@ -513,15 +516,21 @@ class PyCodeAddressRange(object):
             self.ar_line = self.computed_line
 
     def _retreat(self):
-        ldelta = struct.unpack('b', self.co_linetable[self.lo_next - 1:self.lo_next])[0]
+        ldelta = struct.unpack("b", self.co_linetable[self.lo_next - 1 : self.lo_next])[
+            0
+        ]
         if ldelta == -128:
             ldelta = 0
 
         self.computed_line -= ldelta
         self.lo_next -= 2
         self.ar_end = self.ar_start
-        self.ar_start -= struct.unpack('B', self.co_linetable[self.lo_next - 2:self.lo_next - 1])[0]
-        ldelta = struct.unpack('b', self.co_linetable[self.lo_next - 1:self.lo_next])[0]
+        self.ar_start -= struct.unpack(
+            "B", self.co_linetable[self.lo_next - 2 : self.lo_next - 1]
+        )[0]
+        ldelta = struct.unpack("b", self.co_linetable[self.lo_next - 1 : self.lo_next])[
+            0
+        ]
         if ldelta == -128:
             self.ar_line = -1
         else:
@@ -529,11 +538,10 @@ class PyCodeAddressRange(object):
 
 
 class PyCodeObject(PyObject):
-
-    typename = 'code'
+    typename = "code"
 
     def addr2line(self, f_lineno, f_lasti):
-        addr_range_type = self.target.FindFirstType('PyCodeAddressRange')
+        addr_range_type = self.target.FindFirstType("PyCodeAddressRange")
         if addr_range_type.IsValid():
             # CPython >= 3.10 (PEP 626)
             if f_lineno:
@@ -547,8 +555,8 @@ class PyCodeObject(PyObject):
     def _from_co_linetable(self, address):
         """Translated code from Objects/codeobject.c:PyCode_Addr2Line."""
 
-        co_linetable = PyObject.from_value(self.child('co_linetable')).value
-        co_firstlineno = self.child('co_firstlineno').signed
+        co_linetable = PyObject.from_value(self.child("co_linetable")).value
+        co_firstlineno = self.child("co_firstlineno").signed
         if address < 0:
             return co_firstlineno
 
@@ -565,13 +573,17 @@ class PyCodeObject(PyObject):
     def _from_co_lnotab(self, address):
         """Translated pseudocode from Objects/lnotab_notes.txt."""
 
-        co_lnotab = PyObject.from_value(self.child('co_lnotab')).value
+        co_lnotab = PyObject.from_value(self.child("co_lnotab")).value
         assert len(co_lnotab) % 2 == 0
 
         lineno = addr = 0
         for addr_incr, line_incr in zip(co_lnotab[::2], co_lnotab[1::2]):
-            addr_incr = ord(addr_incr) if isinstance(addr_incr, (bytes, str)) else addr_incr
-            line_incr = ord(line_incr) if isinstance(line_incr, (bytes, str)) else line_incr
+            addr_incr = (
+                ord(addr_incr) if isinstance(addr_incr, (bytes, str)) else addr_incr
+            )
+            line_incr = (
+                ord(line_incr) if isinstance(line_incr, (bytes, str)) else line_incr
+            )
 
             addr += addr_incr
             if addr > address:
@@ -584,19 +596,18 @@ class PyCodeObject(PyObject):
 
 
 class PyFrameObject(PyObject):
-
-    typename = 'frame'
+    typename = "frame"
 
     def __init__(self, lldb_value):
         super(PyFrameObject, self).__init__(lldb_value)
-        self.co = PyCodeObject(self.child('f_code'))
+        self.co = PyCodeObject(self.child("f_code"))
 
     @classmethod
     def _from_frame_no_walk(cls, frame):
         """
         Extract PyFrameObject object from current frame w/o stack walking.
         """
-        f = frame.variables['f']
+        f = frame.variables["f"]
         if f and is_available(f[0]):
             return cls(f[0])
         else:
@@ -619,16 +630,16 @@ class PyFrameObject(PyObject):
         """
 
         target = frame.GetThread().GetProcess().GetTarget()
-        object_type = target.FindFirstType('PyObject')
+        object_type = target.FindFirstType("PyObject")
 
         # in CPython >= 3.9, PyFrameObject is an opaque type that does not
         # expose its own structure. Unfortunately, we can't make any function
         # calls here, so we resort to using the internal counterpart instead
-        public_frame_type = target.FindFirstType('PyFrameObject')
-        internal_frame_type = target.FindFirstType('_frame')
-        frame_type = (public_frame_type
-                      if public_frame_type.members
-                      else internal_frame_type)
+        public_frame_type = target.FindFirstType("PyFrameObject")
+        internal_frame_type = target.FindFirstType("_frame")
+        frame_type = (
+            public_frame_type if public_frame_type.members else internal_frame_type
+        )
 
         found_frames = []
         for register in general_purpose_registers(frame):
@@ -642,15 +653,18 @@ class PyFrameObject(PyObject):
             if pyobject.typename != PyFrameObject.typename:
                 continue
 
-            found_frames.append(PyFrameObject(sbvalue.Cast(frame_type.GetPointerType())))
+            found_frames.append(
+                PyFrameObject(sbvalue.Cast(frame_type.GetPointerType()))
+            )
 
         # sometimes the parent _PyEval_EvalFrameDefault frame contains two
         # PyFrameObject's - the one that is currently being executed and its
         # parent, so we need to filter out the latter
         found_frames_addresses = [frame.lldb_value.unsigned for frame in found_frames]
         eligible_frames = [
-            frame for frame in found_frames
-            if frame.child('f_back').unsigned not in found_frames_addresses
+            frame
+            for frame in found_frames
+            if frame.child("f_back").unsigned not in found_frames_addresses
         ]
 
         if eligible_frames:
@@ -662,7 +676,7 @@ class PyFrameObject(PyObject):
             return None
 
         # check if we are in a potential function
-        if frame.name not in ('_PyEval_EvalFrameDefault', 'PyEval_EvalFrameEx'):
+        if frame.name not in ("_PyEval_EvalFrameDefault", "PyEval_EvalFrameEx"):
             return None
 
         # try different methods of getting PyFrameObject before giving up
@@ -697,12 +711,12 @@ class PyFrameObject(PyObject):
 
     @property
     def filename(self):
-        return PyObject.from_value(self.co.child('co_filename')).value
+        return PyObject.from_value(self.co.child("co_filename")).value
 
     @property
     def line_number(self):
-        f_lineno = self.child('f_lineno').signed
-        f_lasti = self.child('f_lasti').signed
+        f_lineno = self.child("f_lineno").signed
+        f_lasti = self.child("f_lasti").signed
 
         return self.co.addr2line(f_lineno, f_lasti)
 
@@ -710,16 +724,16 @@ class PyFrameObject(PyObject):
     def line(self):
         try:
             encoding = source_file_encoding(self.filename)
-            return source_file_lines(self.filename,
-                                     self.line_number, self.line_number + 1,
-                                     encoding=encoding)[0]
+            return source_file_lines(
+                self.filename, self.line_number, self.line_number + 1, encoding=encoding
+            )[0]
         except (IOError, IndexError):
-            return u'<source code is not available>'
+            return "<source code is not available>"
 
     def to_pythonlike_string(self):
         lineno = self.line_number
-        co_name = PyObject.from_value(self.co.child('co_name')).value
-        return u'File "{filename}", line {lineno}, in {co_name}'.format(
+        co_name = PyObject.from_value(self.co.child("co_name")).value
+        return 'File "{filename}", line {lineno}, in {co_name}'.format(
             filename=self.filename,
             co_name=co_name,
             lineno=lineno,
@@ -727,6 +741,7 @@ class PyFrameObject(PyObject):
 
 
 # Commands
+
 
 @six.add_metaclass(abc.ABCMeta)
 class Command(object):
@@ -755,9 +770,9 @@ class Command(object):
             args = self.argument_parser.parse_args(shlex.split(command))
             self.execute(debugger, args, result)
         except Exception as e:
-            msg = u'Failed to execute command `{}`: {}'.format(self.command, e)
+            msg = "Failed to execute command `{}`: {}".format(self.command, e)
             if six.PY2:
-                msg = msg.encode('utf-8')
+                msg = msg.encode("utf-8")
 
             result.SetError(msg)
 
@@ -775,7 +790,7 @@ class Command(object):
         return argparse.ArgumentParser(
             prog=self.command,
             description=self.get_long_help(),
-            formatter_class=argparse.RawDescriptionHelpFormatter
+            formatter_class=argparse.RawDescriptionHelpFormatter,
         )
 
     @abc.abstractproperty
@@ -808,7 +823,7 @@ class Command(object):
 class PyBt(Command):
     """Print a Python-level call trace of the selected thread."""
 
-    command = 'py-bt'
+    command = "py-bt"
 
     def execute(self, debugger, args, result):
         target = debugger.GetSelectedTarget()
@@ -818,14 +833,14 @@ class PyBt(Command):
 
         lines = []
         for pyframe in reversed(pystack):
-            lines.append(u'  ' + pyframe.to_pythonlike_string())
-            lines.append(u'    ' + pyframe.line.strip())
+            lines.append("  " + pyframe.to_pythonlike_string())
+            lines.append("    " + pyframe.line.strip())
 
         if lines:
-            write_string(result, u'Traceback (most recent call last):')
-            write_string(result, u'\n'.join(lines))
+            write_string(result, "Traceback (most recent call last):")
+            write_string(result, "\n".join(lines))
         else:
-            write_string(result, u'No Python traceback found')
+            write_string(result, "No Python traceback found")
 
 
 class PyList(Command):
@@ -853,13 +868,13 @@ class PyList(Command):
     to list the source code within a specific range of lines.
     """
 
-    command = 'py-list'
+    command = "py-list"
 
     @property
     def argument_parser(self):
         parser = super(PyList, self).argument_parser
 
-        parser.add_argument('linenum', nargs='*', type=int, default=[0, 0])
+        parser.add_argument("linenum", nargs="*", type=int, default=[0, 0])
 
         return parser
 
@@ -884,13 +899,13 @@ class PyList(Command):
         # of lines instead of the context around the line that is being executed
         linenum_range = args.linenum
         if len(linenum_range) > 2:
-            write_string(result, u'Usage: py-list [start [end]]')
+            write_string(result, "Usage: py-list [start [end]]")
             return
 
         # find the most recent Python frame in the callstack of the selected thread
         current_frame = select_closest_python_frame(debugger)
         if current_frame is None:
-            write_string(result, u'<source code is not available>')
+            write_string(result, "<source code is not available>")
             return
 
         # determine the location of the module and the exact line that is currently
@@ -903,29 +918,29 @@ class PyList(Command):
         try:
             encoding = source_file_encoding(filename)
             lines = source_file_lines(filename, start, end + 1, encoding=encoding)
-            for (i, line) in enumerate(lines, start):
+            for i, line in enumerate(lines, start):
                 # highlight the current line
                 if i == current_line_num:
-                    prefix = u'>{}'.format(i)
+                    prefix = ">{}".format(i)
                 else:
-                    prefix = u'{}'.format(i)
+                    prefix = "{}".format(i)
 
-                write_string(result, u'{:>5}    {}'.format(prefix, line.rstrip()))
+                write_string(result, "{:>5}    {}".format(prefix, line.rstrip()))
         except IOError:
-            write_string(result, u'<source code is not available>')
+            write_string(result, "<source code is not available>")
 
 
 class PyUp(Command):
     """Select an older Python stack frame."""
 
-    command = 'py-up'
+    command = "py-up"
 
     def execute(self, debugger, args, result):
         select_closest_python_frame(debugger, direction=Direction.UP)
 
         new_frame = move_python_frame(debugger, direction=Direction.UP)
         if new_frame is None:
-            write_string(result, u'*** Oldest frame')
+            write_string(result, "*** Oldest frame")
         else:
             print_frame_summary(result, new_frame)
 
@@ -933,14 +948,14 @@ class PyUp(Command):
 class PyDown(Command):
     """Select a newer Python stack frame."""
 
-    command = 'py-down'
+    command = "py-down"
 
     def execute(self, debugger, args, result):
         select_closest_python_frame(debugger, direction=Direction.DOWN)
 
         new_frame = move_python_frame(debugger, direction=Direction.DOWN)
         if new_frame is None:
-            write_string(result, u'*** Newest frame')
+            write_string(result, "*** Newest frame")
         else:
             print_frame_summary(result, new_frame)
 
@@ -948,12 +963,12 @@ class PyDown(Command):
 class PyLocals(Command):
     """Print the values of local variables in the selected Python frame."""
 
-    command = 'py-locals'
+    command = "py-locals"
 
     def execute(self, debugger, args, result):
         current_frame = select_closest_python_frame(debugger, direction=Direction.UP)
         if current_frame is None:
-            write_string(result, u'No locals found (symbols might be missing!)')
+            write_string(result, "No locals found (symbols might be missing!)")
             return
 
         # merge logic is based on the implementation of PyFrame_LocalsToFast()
@@ -961,16 +976,16 @@ class PyLocals(Command):
 
         # f_locals contains top-level declarations (e.g. functions or classes)
         # of a frame executing a Python module, rather than a function
-        f_locals = current_frame.child('f_locals')
+        f_locals = current_frame.child("f_locals")
         if f_locals.unsigned != 0:
-            for (k, v) in PyDictObject(f_locals).value.items():
+            for k, v in PyDictObject(f_locals).value.items():
                 merged_locals[k.value] = v
 
         # f_localsplus stores local variables and arguments of function frames
-        fast_locals = current_frame.child('f_localsplus')
-        f_code = PyCodeObject(current_frame.child('f_code'))
-        varnames = PyTupleObject(f_code.child('co_varnames'))
-        for (i, name) in enumerate(varnames.value):
+        fast_locals = current_frame.child("f_localsplus")
+        f_code = PyCodeObject(current_frame.child("f_code"))
+        varnames = PyTupleObject(f_code.child("co_varnames"))
+        for i, name in enumerate(varnames.value):
             value = fast_locals.GetChildAtIndex(i, 0, True)
             if value.unsigned != 0:
                 merged_locals[name.value] = PyObject.from_value(value).value
@@ -978,10 +993,11 @@ class PyLocals(Command):
                 merged_locals.pop(name, None)
 
         for name in sorted(merged_locals.keys()):
-            write_string(result, u'{} = {}'.format(name, repr(merged_locals[name])))
+            write_string(result, "{} = {}".format(name, repr(merged_locals[name])))
 
 
 # Helpers
+
 
 class Direction(object):
     DOWN = -1
@@ -991,8 +1007,8 @@ class Direction(object):
 def print_frame_summary(result, frame):
     """Print a short summary of a given Python frame: module and the line being executed."""
 
-    write_string(result, u'  ' + frame.to_pythonlike_string())
-    write_string(result, u'    ' + frame.line.strip())
+    write_string(result, "  " + frame.to_pythonlike_string())
+    write_string(result, "    " + frame.line.strip())
 
 
 def select_closest_python_frame(debugger, direction=Direction.UP):
@@ -1028,7 +1044,7 @@ def move_python_frame(debugger, direction):
             return python_frame
 
 
-def write_string(result, string, end=u'\n', encoding=locale.getpreferredencoding()):
+def write_string(result, string, end="\n", encoding=locale.getpreferredencoding()):
     """Helper function for writing to SBCommandReturnObject that expects bytes on py2 and str on py3."""
 
     if six.PY3:
@@ -1047,7 +1063,7 @@ def is_available(lldb_value):
 def source_file_encoding(filename):
     """Determine the text encoding of a Python source file."""
 
-    with io.open(filename, 'rt', encoding='latin-1') as f:
+    with io.open(filename, "rt", encoding="latin-1") as f:
         # according to PEP-263 the magic comment must be placed on one of the first two lines
         for _ in range(2):
             line = f.readline()
@@ -1056,18 +1072,18 @@ def source_file_encoding(filename):
                 return match.group(1)
 
     # if not defined explicitly, assume it's UTF-8 (which is ASCII-compatible)
-    return 'utf-8'
+    return "utf-8"
 
 
-def source_file_lines(filename, start, end, encoding='utf-8'):
+def source_file_lines(filename, start, end, encoding="utf-8"):
     """Return the contents of [start; end) lines of the source file.
 
     1 based indexing is used for convenience.
     """
 
     lines = []
-    with io.open(filename, 'rt', encoding=encoding) as f:
-        for (line_num, line) in enumerate(f, 1):
+    with io.open(filename, "rt", encoding=encoding) as f:
+        for line_num, line in enumerate(f, 1):
             if start <= line_num < end:
                 lines.append(line)
             elif line_num > end:
@@ -1079,11 +1095,14 @@ def source_file_lines(filename, start, end, encoding='utf-8'):
 def general_purpose_registers(frame):
     """Return a list of general purpose register names."""
 
-    REGISTER_CLASS = 'General Purpose Registers'
+    REGISTER_CLASS = "General Purpose Registers"
 
     try:
-        gpr = next(reg_class for reg_class in frame.registers
-                   if reg_class.name == REGISTER_CLASS)
+        gpr = next(
+            reg_class
+            for reg_class in frame.registers
+            if reg_class.name == REGISTER_CLASS
+        )
         return [reg.name for reg in gpr.children]
     except StopIteration:
         return []
@@ -1092,7 +1111,7 @@ def general_purpose_registers(frame):
 def register_commands(debugger):
     for cls in Command.__subclasses__():
         debugger.HandleCommand(
-            'command script add -c cpython_lldb.{cls} {command}'.format(
+            "command script add -c cpython_lldb.{cls} {command}".format(
                 cls=cls.__name__,
                 command=cls.command,
             )
@@ -1119,20 +1138,18 @@ def register_summaries(debugger):
     # normally, PyObject instances are referenced via a generic PyObject* pointer.
     # pretty_printer() will read the value of ob_type->tp_name to determine the
     # concrete type of the object being inspected
-    debugger.HandleCommand(
-        'type summary add -F cpython_lldb.pretty_printer PyObject'
-    )
+    debugger.HandleCommand("type summary add -F cpython_lldb.pretty_printer PyObject")
 
     # at the same time, built-in types can be referenced directly via pointers to
     # CPython structs. In this case, we also want to be able to print type summaries
     cpython_structs = {
         cls.cpython_struct: cls
         for cls in PyObject.__subclasses__()
-        if hasattr(cls, 'cpython_struct')
+        if hasattr(cls, "cpython_struct")
     }
     for type_ in cpython_structs:
         debugger.HandleCommand(
-            'type summary add -F cpython_lldb.pretty_printer {}'.format(type_)
+            "type summary add -F cpython_lldb.pretty_printer {}".format(type_)
         )
 
     # cache the result of the lookup, so that we do not need to repeat that at runtime

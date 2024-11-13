@@ -9,7 +9,7 @@ import pexpect
 import pytest
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def lldb_session(tmpdir_factory):
     """Starts LLDB in the background with Python as the target process.
 
@@ -21,25 +21,25 @@ def lldb_session(tmpdir_factory):
     """
 
     session = pexpect.spawn(
-        'lldb',
-        args=['-O', 'settings set use-color 0', sys.executable],
-        cwd=tmpdir_factory.mktemp('lldb').strpath,
-        encoding='utf-8',
+        "lldb",
+        args=["-O", "settings set use-color 0", sys.executable],
+        cwd=tmpdir_factory.mktemp("lldb").strpath,
+        encoding="utf-8",
         timeout=6,
         maxread=65536,
         env={
-            'PYTHONDONTWRITEBYTECODE': 'true',
-            'PYTHONPATH': os.environ.get('PYTHONPATH', ''),
-            'PYTHONHASHSEED': os.environ.get('PYTHONHASHSEED', '1'),
-            'LANG': os.environ.get('LANG'),
+            "PYTHONDONTWRITEBYTECODE": "true",
+            "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+            "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED", "1"),
+            "LANG": os.environ.get("LANG"),
         },
     )
-    session.expect('Current executable set to')
+    session.expect("Current executable set to")
 
     yield session
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def lldb_no_symbols_session(tmpdir_factory):
     """Starts LLDB in the background with Python as the target process.
 
@@ -47,29 +47,36 @@ def lldb_no_symbols_session(tmpdir_factory):
     LD_LIBRARY_PATH to point to it.
     """
 
-    tmpdir = tmpdir_factory.mktemp('lldb')
+    tmpdir = tmpdir_factory.mktemp("lldb")
     with tmpdir.as_cwd():
-        libpython = subprocess.check_output("ldd %s | grep libpython | awk '{print $3}'" % (sys.executable), shell=True).decode("utf-8").strip()
+        libpython = (
+            subprocess.check_output(
+                "ldd %s | grep libpython | awk '{print $3}'" % (sys.executable),
+                shell=True,
+            )
+            .decode("utf-8")
+            .strip()
+        )
         libpython_copy = tmpdir.join(os.path.basename(libpython)).strpath
-        subprocess.check_call(['cp',  libpython, libpython_copy])
-        subprocess.check_call(['strip', '-S', libpython_copy])
+        subprocess.check_call(["cp", libpython, libpython_copy])
+        subprocess.check_call(["strip", "-S", libpython_copy])
 
     session = pexpect.spawn(
-        'lldb',
-        args=['-O', 'settings set use-color 0', sys.executable],
+        "lldb",
+        args=["-O", "settings set use-color 0", sys.executable],
         cwd=tmpdir.strpath,
-        encoding='utf-8',
+        encoding="utf-8",
         timeout=6,
         maxread=65536,
         env={
-            'PYTHONDONTWRITEBYTECODE': 'true',
-            'PYTHONPATH': os.environ.get('PYTHONPATH', ''),
-            'PYTHONHASHSEED': os.environ.get('PYTHONHASHSEED', '1'),
-            'LD_LIBRARY_PATH': '.',
-            'LANG': os.environ.get('LANG'),
+            "PYTHONDONTWRITEBYTECODE": "true",
+            "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+            "PYTHONHASHSEED": os.environ.get("PYTHONHASHSEED", "1"),
+            "LD_LIBRARY_PATH": ".",
+            "LANG": os.environ.get("LANG"),
         },
     )
-    session.expect('Current executable set to')
+    session.expect("Current executable set to")
 
     yield session
 
@@ -84,12 +91,12 @@ def _lldb_manager(lldb_session):
     finally:
         os.chdir(prev_cwd)
 
-        lldb_session.sendline('kill')
-        lldb_session.expect(re.compile(r'Process \d+ exited'))
-        lldb_session.expect(re.escape('(lldb) '))
-        lldb_session.sendline('breakpoint delete --force')
-        lldb_session.expect('All breakpoints removed. ')
-        lldb_session.expect(re.escape('(lldb) '))
+        lldb_session.sendline("kill")
+        lldb_session.expect(re.compile(r"Process \d+ exited"))
+        lldb_session.expect(re.escape("(lldb) "))
+        lldb_session.sendline("breakpoint delete --force")
+        lldb_session.expect("All breakpoints removed. ")
+        lldb_session.expect(re.escape("(lldb) "))
 
 
 @pytest.fixture
@@ -131,24 +138,24 @@ def run_lldb(lldb_manager, code, breakpoint, commands):
     outputs = []
 
     with lldb_manager() as lldb:
-        with io.open('test.py', 'wb') as fp:
+        with io.open("test.py", "wb") as fp:
             if isinstance(code, str):
-                code = code.encode('utf-8')
+                code = code.encode("utf-8")
 
             fp.write(code)
 
-        lldb.sendline('breakpoint set -r %s' % breakpoint)
-        lldb.expect(r'Breakpoint \d+')
-        lldb.expect(re.escape('(lldb) '))
-        lldb.sendline('run test.py')
-        lldb.expect(r'Process \d+ stopped')
-        lldb.expect(re.escape('(lldb) '))
+        lldb.sendline("breakpoint set -r %s" % breakpoint)
+        lldb.expect(r"Breakpoint \d+")
+        lldb.expect(re.escape("(lldb) "))
+        lldb.sendline("run test.py")
+        lldb.expect(r"Process \d+ stopped")
+        lldb.expect(re.escape("(lldb) "))
 
         for command in commands:
             lldb.sendline(command)
-            lldb.expect(re.escape('%s\r\n' % command))
-            lldb.expect(re.escape('(lldb) '))
+            lldb.expect(re.escape("%s\r\n" % command))
+            lldb.expect(re.escape("(lldb) "))
 
-            outputs.append(normalize_stacktrace(lldb.before.replace('\r\n', '\n')))
+            outputs.append(normalize_stacktrace(lldb.before.replace("\r\n", "\n")))
 
     return outputs
