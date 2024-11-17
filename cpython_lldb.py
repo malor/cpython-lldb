@@ -322,8 +322,16 @@ class _PyDictObject(object):
         value = self.deref.Cast(dict_type)
 
         ma_keys = value.GetChildMemberWithName("ma_keys")
-        table_size = ma_keys.GetChildMemberWithName("dk_size").unsigned
         num_entries = ma_keys.GetChildMemberWithName("dk_nentries").unsigned
+
+        dk_log2_size = ma_keys.GetChildMemberWithName("dk_log2_size")
+        if dk_log2_size.IsValid():
+            # CPython version >= 3.11
+            table_size = 1 << dk_log2_size.unsigned
+        else:
+            # CPython version < 3.11
+            dk_size = ma_keys.GetChildMemberWithName("dk_size")
+            table_size = dk_size.unsigned
 
         # hash table effectively stores indexes of entries in the key/value
         # pairs array; the size of an index varies, so that all possible
