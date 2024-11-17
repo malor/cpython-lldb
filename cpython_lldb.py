@@ -426,24 +426,45 @@ class Defaultdict(PyObject):
 class _CollectionsUserObject(object):
     @property
     def value(self):
+        # UserDict, UserString, and UserList all have a single instance variable
+        # called "data", which is the collection used for storing the elements.
+        # As usual, that instance variable is stored in __dict__, so we need to
+        # find the location of that dict object first and look up the key.
+
         dict_offset = (
             self.lldb_value.GetChildMemberWithName("ob_type")
             .GetChildMemberWithName("tp_dictoffset")
-            .unsigned
+            .signed
         )
+        if dict_offset > 0:
+            # CPython < 3.11: __dict__ is located $tp_dictoffset bytes after the
+            # start of the common PyObject header.
+            object_type = self.target.FindFirstType("PyObject")
+            address = lldb.SBAddress(
+                int(self.lldb_value.value, 16) + dict_offset, self.target
+            )
+            value = self.target.CreateValueFromAddress(
+                "value", address, object_type.GetPointerType()
+            )
 
-        object_type = self.target.FindFirstType("PyObject")
-        address = lldb.SBAddress(
-            int(self.lldb_value.value, 16) + dict_offset, self.target
-        )
-        value = self.target.CreateValueFromAddress(
-            "value", address, object_type.GetPointerType()
-        )
+            return next(
+                v for k, v in PyDictObject(value).value.items() if k.value == "data"
+            )
+        else:
+            # CPython >= 3.11: &__dict__ is always stored at a fixed offset
+            # before the start of the common PyObject header.
+            object_type = self.target.FindFirstType("PyDictValues")
+            address = lldb.SBAddress(int(self.lldb_value.value, 16) - 32, self.target)
+            value = self.target.CreateValueFromAddress(
+                "value", address, object_type.GetPointerType()
+            )
 
-        # "data" is the real object used to store the contents of the class
-        return next(
-            v for k, v in PyDictObject(value).value.items() if k.value == "data"
-        )
+            # TODO: This only works because there is only one instance variable
+            # called "data" right now. We need to solve the generic case and
+            # implement iteration over PyDictValues entries.
+            return PyObject.from_value(
+                value.deref.GetChildMemberWithName("values").GetChildAtIndex(0)
+            )
 
 
 class UserDict(_CollectionsUserObject, PyObject):
