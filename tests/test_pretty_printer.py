@@ -5,16 +5,74 @@ import textwrap
 from .conftest import run_lldb
 
 
-def lldb_repr_from_frame(lldb_manager, value):
+LEGACY_UNICODE_HELPERS = textwrap.dedent(
+    """
+    import ctypes
+
+    Py_ssize_t = ctypes.c_ssize_t
+
+    class _PyASCIIObject(ctypes.Structure):
+        _fields_ = [
+            ("ob_refcnt", Py_ssize_t),
+            ("ob_type", ctypes.c_void_p),
+            ("length", Py_ssize_t),
+            ("hash", Py_ssize_t),
+            ("state", ctypes.c_uint),
+            ("wstr", ctypes.c_void_p),
+        ]
+
+    class _PyCompactUnicodeObject(ctypes.Structure):
+        _fields_ = [
+            ("_base", _PyASCIIObject),
+            ("utf8_length", Py_ssize_t),
+            ("utf8", ctypes.c_void_p),
+            ("wstr_length", Py_ssize_t),
+        ]
+
+    _PyUnicode_FromUnicode = ctypes.pythonapi.PyUnicode_FromUnicode
+    _PyUnicode_FromUnicode.argtypes = [ctypes.c_void_p, Py_ssize_t]
+    _PyUnicode_FromUnicode.restype = ctypes.py_object
+
+    _PyUnicode_Ready = ctypes.pythonapi._PyUnicode_Ready
+    _PyUnicode_Ready.argtypes = [ctypes.py_object]
+    _PyUnicode_Ready.restype = ctypes.c_int
+
+    def make_legacy_string(text, ready=False):
+        size = len(text)
+        legacy = _PyUnicode_FromUnicode(ctypes.c_void_p(), size)
+        header = _PyCompactUnicodeObject.from_address(id(legacy))
+        buffer_type = ctypes.c_wchar * (size + 1)
+        buffer = buffer_type.from_address(header._base.wstr)
+        for index, char in enumerate(text):
+            buffer[index] = char
+        buffer[size] = '\\0'
+        if ready:
+            _PyUnicode_Ready(legacy)
+        return legacy
+    """
+)
+
+
+def legacy_unicode_setup(text_literal, ready):
+    return LEGACY_UNICODE_HELPERS + textwrap.dedent(
+        """
+        legacy_value = make_legacy_string({text_literal}, ready={ready})
+        """
+    ).format(text_literal=text_literal, ready="True" if ready else "False")
+
+
+def lldb_repr_from_frame(lldb_manager, value, setup_code=""):
     # Set a breakpoint in the implementation of a function that is conveniently
     # called with a single argument `v`, whose representation we are trying to
     # scrape from the LLDB output. When the breakpoint is hit, the argument
     # value will be pretty-printed by `frame info` command.
+    setup_block = textwrap.dedent(setup_code) if setup_code else ""
     code = f"""
         from collections import *
         from six.moves import *
 
         import test_extension
+        {setup_block}
         test_extension.identity({value})
     """
     response = run_lldb(
@@ -30,9 +88,9 @@ def lldb_repr_from_frame(lldb_manager, value):
     return match
 
 
-def assert_lldb_repr(lldb_manager, value, expected, code_value=None):
+def assert_lldb_repr(lldb_manager, value, expected, code_value=None, setup_code=""):
     value_repr = code_value or repr(value)
-    match = lldb_repr_from_frame(lldb_manager, value_repr)
+    match = lldb_repr_from_frame(lldb_manager, value_repr, setup_code=setup_code)
     assert match is not None
 
     if isinstance(value, (set, frozenset, dict)):
@@ -99,6 +157,31 @@ def test_str(lldb):
         lldb, "𐅐𐅀𐅰", "(u'\\\\U00010150\\\\U00010140\\\\U00010170')|('𐅐𐅀𐅰')"
     )
     assert_lldb_repr(lldb, "æ", "(u'\\\\xe6')|('æ')")
+
+
+def test_str_legacy_not_ready(lldb):
+    legacy_value = "\u041f\u0440\u0438\u0432\u0435\u0442"
+    setup_code = legacy_unicode_setup('"\\u041f\\u0440\\u0438\\u0432\\u0435\\u0442"', ready=False)
+    assert_lldb_repr(
+        lldb,
+        legacy_value,
+        "(u'\u041f\u0440\u0438\u0432\u0435\u0442')|('ÐÑÐ¸Ð²ÐµÑ')",
+        code_value="legacy_value",
+        setup_code=setup_code,
+    )
+
+
+def test_str_legacy_ready_non_compact(lldb):
+    legacy_value = "A\u2665B"
+    setup_code = legacy_unicode_setup('"A\\u2665B"', ready=True)
+    assert_lldb_repr(
+        lldb,
+        legacy_value,
+        "(u'A\u2665B')|('Aâ¥B')",
+        code_value="legacy_value",
+        setup_code=setup_code,
+    )
+
 
 
 def test_list(lldb):

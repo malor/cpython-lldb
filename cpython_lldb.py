@@ -181,22 +181,64 @@ class PyUnicodeObject(PyObject):
     U_2BYTE_KIND = 2
     U_4BYTE_KIND = 4
 
+    def _byte_order_suffix(self):
+        order = self.target.GetByteOrder()
+        if order == lldb.eByteOrderBig:
+            return "be"
+        else:
+            # treat PDP/endian-less targets as little endian, which matches
+            # the architectures CPython officially supports today
+            return "le"
+
+    def _encoding_for_unit_size(self, unit_size):
+        if unit_size == 1:
+            return "latin-1"
+        elif unit_size == 2:
+            return "utf-16-{}".format(self._byte_order_suffix())
+        elif unit_size == 4:
+            return "utf-32-{}".format(self._byte_order_suffix())
+        raise ValueError("Unsupported code unit size: {}".format(unit_size))
+
+    def _code_unit_size(self, kind):
+        if kind == self.U_1BYTE_KIND:
+            return 1
+        elif kind == self.U_2BYTE_KIND:
+            return 2
+        elif kind == self.U_4BYTE_KIND:
+            return 4
+        raise ValueError("Unsupported PyUnicodeObject kind: {}".format(kind))
+
+    def _decode_from_address(self, addr, length, unit_size, encoding=None):
+        if not addr or not length:
+            return ""
+
+        error = lldb.SBError()
+        data = self.process.ReadMemory(addr, length * unit_size, error)
+        if error.Fail():
+            raise RuntimeError(
+                "Failed to read unicode contents at 0x{:x}: {}".format(
+                    addr, error.GetCString()
+                )
+            )
+
+        encoding = encoding or self._encoding_for_unit_size(unit_size)
+        return data.decode(encoding)
+
     @property
     def value(self):
         str_type = self.target.FindFirstType(self.cpython_struct)
 
-        value = self.deref.Cast(str_type)
-        state = (
-            value.GetChildMemberWithName("_base")
+        unicode_value = self.deref.Cast(str_type)
+        ascii_base = (
+            unicode_value.GetChildMemberWithName("_base")
             .GetChildMemberWithName("_base")
-            .GetChildMemberWithName("state")
         )
-        length = (
-            value.GetChildMemberWithName("_base")
-            .GetChildMemberWithName("_base")
-            .GetChildMemberWithName("length")
-            .unsigned
-        )
+        compact_base = unicode_value.GetChildMemberWithName("_base")
+        state = ascii_base.GetChildMemberWithName("state")
+        length = ascii_base.GetChildMemberWithName("length").unsigned
+        wstr_length = compact_base.GetChildMemberWithName("wstr_length").unsigned
+        if not length and wstr_length:
+            length = wstr_length
         if not length:
             return ""
 
@@ -208,29 +250,34 @@ class PyUnicodeObject(PyObject):
         if is_ascii and compact and ready:
             # content is stored right after the data structure in memory
             ascii_type = self.target.FindFirstType("PyASCIIObject")
-            value = value.Cast(ascii_type)
-            addr = int(value.location, 16) + value.size
+            ascii_value = unicode_value.Cast(ascii_type)
+            addr = int(ascii_value.location, 16) + ascii_value.size
 
-            rv = self.process.ReadMemory(addr, length, lldb.SBError())
-            return rv.decode("ascii")
+            return self._decode_from_address(addr, length, 1, encoding="ascii")
         elif compact and ready:
             # content is stored right after the data structure in memory
             compact_type = self.target.FindFirstType("PyCompactUnicodeObject")
-            value = value.Cast(compact_type)
-            addr = int(value.location, 16) + value.size
+            compact_value = unicode_value.Cast(compact_type)
+            addr = int(compact_value.location, 16) + compact_value.size
+            unit_size = self._code_unit_size(kind)
 
-            rv = self.process.ReadMemory(addr, length * kind, lldb.SBError())
-            if kind == self.U_1BYTE_KIND:
-                return rv.decode("latin-1")
-            elif kind == self.U_2BYTE_KIND:
-                return rv.decode("utf-16")
-            elif kind == self.U_4BYTE_KIND:
-                return rv.decode("utf-32")
-            else:
-                raise ValueError("Unsupported PyUnicodeObject kind: {}".format(kind))
+            return self._decode_from_address(addr, length, unit_size)
+        elif ready:
+            data_field = unicode_value.GetChildMemberWithName("data")
+            data_ptr = data_field.GetChildMemberWithName("any")
+            addr = data_ptr.unsigned
+            unit_size = self._code_unit_size(kind)
+
+            return self._decode_from_address(addr, length, unit_size)
         else:
-            # TODO: add support for legacy unicode strings
-            raise ValueError("Unsupported PyUnicodeObject kind: {}".format(kind))
+            # legacy unicode strings that only have wstr filled in
+            wstr = ascii_base.GetChildMemberWithName("wstr")
+            addr = wstr.unsigned
+            wchar_size = self.target.FindFirstType("wchar_t").size
+            if not wchar_size:
+                raise ValueError("Unsupported wchar_t size: {}".format(wchar_size))
+
+            return self._decode_from_address(addr, length, wchar_size)
 
 
 class PyNoneObject(PyObject):
