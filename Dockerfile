@@ -4,8 +4,8 @@ FROM python:${PY_VERSION}
 ARG LLDB_VERSION=16
 
 RUN DEBIAN_VERSION=`awk -F"[)(]+" '/VERSION=/ {print $2}' /etc/os-release` && \
-    wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
-    echo "deb http://apt.llvm.org/${DEBIAN_VERSION}/ llvm-toolchain-${DEBIAN_VERSION}-${LLDB_VERSION} main" >> /etc/apt/sources.list; \
+    wget -q https://apt.llvm.org/llvm-snapshot.gpg.key -O /usr/share/keyrings/apt.llvm.org.asc && \
+    echo "deb [signed-by=/usr/share/keyrings/apt.llvm.org.asc] http://apt.llvm.org/${DEBIAN_VERSION}/ llvm-toolchain-${DEBIAN_VERSION}-${LLDB_VERSION} main" >> /etc/apt/sources.list && \
     apt-get update && apt-get install -y lldb-${LLDB_VERSION} python3-lldb-${LLDB_VERSION} && \
     ln -s /usr/bin/lldb-${LLDB_VERSION} /usr/bin/lldb
 
