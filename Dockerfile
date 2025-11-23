@@ -15,7 +15,7 @@ RUN if [ "${LLDB_VERSION}" = "9" ]; then \
     fi && \
     apt-get install -y python3-lldb-${LLDB_VERSION}
 
-ENV PYTHONPATH /usr/lib/llvm-${LLDB_VERSION}/lib/python3/dist-packages
+ENV PYTHONPATH=/usr/lib/llvm-${LLDB_VERSION}/lib/python3/dist-packages
 
 RUN python -m pip install poetry six
 

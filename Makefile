@@ -14,7 +14,8 @@ else
 endif
 
 build-image:
-	docker build \
+	docker buildx build  \
+		--debug \
 		-t cpython-lldb:$(DOCKER_IMAGE_TAG) \
 		--build-arg PY_VERSION=$(PY_DISTRO) \
 		--build-arg LLDB_VERSION=$(LLDB_VERSION) \
