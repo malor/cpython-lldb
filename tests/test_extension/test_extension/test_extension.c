@@ -69,7 +69,7 @@ static PyObject* identity(PyObject* self, PyObject* args) {
 
 static PyMethodDef methods[] = {
     { "spam", spam, METH_NOARGS, "Test Extension Function" },
-    { "eggs", eggs, METH_VARARGS | METH_KEYWORDS, "Test Extension Function" },
+    { "eggs", (PyCFunction) eggs, METH_VARARGS | METH_KEYWORDS, "Test Extension Function" },
     { "identity", identity, METH_VARARGS, "Returns the passed value. Used in testing." },
     { NULL, NULL, 0, NULL }
 };

@@ -2,19 +2,20 @@ PY_VERSION ?= 3.10
 LLDB_VERSION ?= 11
 DOCKER_IMAGE_TAG = $(PY_VERSION)-lldb$(LLDB_VERSION)
 
-ifeq ($(shell test $(LLDB_VERSION) -lt 11 && echo true), true)
-	# LLVM >= 7: https://apt.llvm.org/buster/pool/main/l/
-	PY_DISTRO = $(PY_VERSION)-buster
-else ifeq ($(shell test $(LLDB_VERSION) -lt 15 && echo true), true)
+ifeq ($(shell test $(LLDB_VERSION) -lt 15 && echo true), true)
 	# LLVM >= 11: https://apt.llvm.org/bullseye/pool/main/l/
 	PY_DISTRO = $(PY_VERSION)-bullseye
+else ifeq ($(shell test $(LLDB_VERSION) -lt 20 && echo true), true)
+	# LLVM >= 15: https://apt.llvm.org/bookworm/pool/main/l/
+	PY_DISTRO = $(PY_VERSION)-bookworm
 else
-	# LLVM >= 15
-	PY_DISTRO = $(PY_VERSION)
+	# LLVM >= 20: https://apt.llvm.org/trixie/pool/main/l/
+	PY_DISTRO = $(PY_VERSION)-trixie
 endif
 
 build-image:
-	docker build \
+	docker buildx build  \
+		--debug \
 		-t cpython-lldb:$(DOCKER_IMAGE_TAG) \
 		--build-arg PY_VERSION=$(PY_DISTRO) \
 		--build-arg LLDB_VERSION=$(LLDB_VERSION) \

@@ -48,11 +48,16 @@ jobs:
           - '3.9'
           - '3.10'
         lldb_version:
-          - '9'
-          - '10'
           - '11'
           - '15'
           - '16'
+          - '21'
+        exclude:
+          # LLDB >=20 requires a Debian Trixie Docker image that does not support older CPython versions.
+          - py_version: '3.7'
+            lldb_version: '21'
+          - py_version: '3.8'
+            lldb_version: '21'
 
     runs-on: ubuntu-latest
 
