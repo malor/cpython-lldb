@@ -2,10 +2,7 @@ PY_VERSION ?= 3.10
 LLDB_VERSION ?= 11
 DOCKER_IMAGE_TAG = $(PY_VERSION)-lldb$(LLDB_VERSION)
 
-ifeq ($(shell test $(LLDB_VERSION) -lt 11 && echo true), true)
-	# LLVM >= 7: https://apt.llvm.org/buster/pool/main/l/
-	PY_DISTRO = $(PY_VERSION)-buster
-else ifeq ($(shell test $(LLDB_VERSION) -lt 15 && echo true), true)
+ifeq ($(shell test $(LLDB_VERSION) -lt 15 && echo true), true)
 	# LLVM >= 11: https://apt.llvm.org/bullseye/pool/main/l/
 	PY_DISTRO = $(PY_VERSION)-bullseye
 else
