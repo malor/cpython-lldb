@@ -315,6 +315,8 @@ def test_locals_c_extension(lldb):
 (PyListObject *) local_list = [17, 18, 19]
 (PyLongObject *) local_long = 17
 (PyTupleObject *) local_tuple = (24, 23, 22)
+(PyUnicodeObject *) local_legacy_unicode = u'привіт'
+(PyUnicodeObject *) local_legacy_unicode_ready = u'світ'
 (PyUnicodeObject *) local_unicode = u'hello'
 """.rstrip()
 
@@ -325,6 +327,8 @@ def test_locals_c_extension(lldb):
 (PyListObject *) local_list = [17, 18, 19]
 (PyLongObject *) local_long = 17
 (PyTupleObject *) local_tuple = (24, 23, 22)
+(PyUnicodeObject *) local_legacy_unicode = 'привіт'
+(PyUnicodeObject *) local_legacy_unicode_ready = 'світ'
 (PyUnicodeObject *) local_unicode = 'hello'
 """.rstrip()
 

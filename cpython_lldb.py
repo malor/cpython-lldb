@@ -181,56 +181,83 @@ class PyUnicodeObject(PyObject):
     U_2BYTE_KIND = 2
     U_4BYTE_KIND = 4
 
+    @staticmethod
+    def _get_encoding(kind):
+        if kind == PyUnicodeObject.U_1BYTE_KIND:
+            return "latin-1"
+        elif kind == PyUnicodeObject.U_2BYTE_KIND:
+            return "utf-16"
+        elif kind == PyUnicodeObject.U_4BYTE_KIND:
+            return "utf-32"
+        else:
+            raise ValueError("Unsupported PyUnicodeObject kind: {}".format(kind))
+
+    @staticmethod
+    def _read_string_from_memory(process, addr, length, kind):
+        if not length:
+            return ""
+
+        rv = process.ReadMemory(addr, length * kind, lldb.SBError())
+        return rv.decode(PyUnicodeObject._get_encoding(kind))
+
     @property
     def value(self):
         str_type = self.target.FindFirstType(self.cpython_struct)
 
         value = self.deref.Cast(str_type)
-        state = (
-            value.GetChildMemberWithName("_base")
-            .GetChildMemberWithName("_base")
-            .GetChildMemberWithName("state")
-        )
         length = (
             value.GetChildMemberWithName("_base")
             .GetChildMemberWithName("_base")
             .GetChildMemberWithName("length")
             .unsigned
         )
-        if not length:
-            return ""
-
+        state = (
+            value.GetChildMemberWithName("_base")
+            .GetChildMemberWithName("_base")
+            .GetChildMemberWithName("state")
+        )
         compact = bool(state.GetChildMemberWithName("compact").unsigned)
         is_ascii = bool(state.GetChildMemberWithName("ascii").unsigned)
         kind = state.GetChildMemberWithName("kind").unsigned
         ready = bool(state.GetChildMemberWithName("ready").unsigned)
 
+        # Reference: PEP 393 and Include/cpython/unicodeobject.h.
         if is_ascii and compact and ready:
             # content is stored right after the data structure in memory
             ascii_type = self.target.FindFirstType("PyASCIIObject")
             value = value.Cast(ascii_type)
-            addr = int(value.location, 16) + value.size
-
-            rv = self.process.ReadMemory(addr, length, lldb.SBError())
-            return rv.decode("ascii")
+            addr = value.address_of.unsigned + value.size
         elif compact and ready:
             # content is stored right after the data structure in memory
             compact_type = self.target.FindFirstType("PyCompactUnicodeObject")
             value = value.Cast(compact_type)
-            addr = int(value.location, 16) + value.size
-
-            rv = self.process.ReadMemory(addr, length * kind, lldb.SBError())
-            if kind == self.U_1BYTE_KIND:
-                return rv.decode("latin-1")
-            elif kind == self.U_2BYTE_KIND:
-                return rv.decode("utf-16")
-            elif kind == self.U_4BYTE_KIND:
-                return rv.decode("utf-32")
-            else:
-                raise ValueError("Unsupported PyUnicodeObject kind: {}".format(kind))
+            addr = value.address_of.unsigned + value.size
+        elif ready:
+            # legacy string, "ready" (content is stored in the `data.any` field)
+            addr = (
+                value.GetChildMemberWithName("data")
+                .GetChildMemberWithName("any")
+                .unsigned
+            )
         else:
-            # TODO: add support for legacy unicode strings
-            raise ValueError("Unsupported PyUnicodeObject kind: {}".format(kind))
+            # legacy string, "not ready" (content is stored in the `wstr` field)
+            wchar_type = self.target.FindFirstType("wchar_t")
+
+            addr = (
+                value.GetChildMemberWithName("_base")
+                .GetChildMemberWithName("_base")
+                .GetChildMemberWithName("wstr")
+            ).unsigned
+            length = (
+                value.GetChildMemberWithName("_base")
+                .GetChildMemberWithName("wstr_length")
+                .unsigned
+            )
+            kind = wchar_type.GetByteSize()
+
+        return PyUnicodeObject._read_string_from_memory(
+            self.process, addr, length, kind
+        )
 
 
 class PyNoneObject(PyObject):

@@ -1,11 +1,33 @@
+#include <stddef.h>
+
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+
+static PyObject* legacy_unicode(const char* value) {
+    PyObject* u = PyUnicode_FromString(value);
+
+    PyUnicodeObject* l = (PyUnicodeObject*) PyUnicode_FromUnicode(NULL, 1);
+    l->_base._base.wstr = PyUnicode_AsWideCharString(u, &l->_base.wstr_length);
+
+    Py_DECREF(u);
+
+    return (PyObject*) l;
+}
+
+static PyObject* legacy_unicode_ready(const char* value) {
+    PyUnicodeObject* l = (PyUnicodeObject*) legacy_unicode(value);
+    PyUnicode_READY(l);
+
+    return (PyObject*) l;
+}
 
 static PyObject* spam(PyObject* self, PyObject* args) {
     PyLongObject* local_long = (PyLongObject*) Py_BuildValue("l", 17);
     PyFloatObject* local_float = (PyFloatObject*) Py_BuildValue("f", 0.0);
     PyBytesObject* local_bytes = (PyBytesObject*) Py_BuildValue("y", "eggs");
     PyUnicodeObject* local_unicode = (PyUnicodeObject*) Py_BuildValue("s", "hello");
+    PyUnicodeObject* local_legacy_unicode = (PyUnicodeObject*) legacy_unicode("привіт");
+    PyUnicodeObject* local_legacy_unicode_ready = (PyUnicodeObject*) legacy_unicode_ready("світ");
     PyListObject* local_list = (PyListObject*) Py_BuildValue("[lll]", 17, 18, 19);
     PyTupleObject* local_tuple = (PyTupleObject*) Py_BuildValue("(lll)", 24, 23, 22);
     PyDictObject* local_dict = (PyDictObject*) Py_BuildValue("{s:l}", "foo", 42);
@@ -25,6 +47,8 @@ static PyObject* spam(PyObject* self, PyObject* args) {
     Py_DECREF(local_float);
     Py_DECREF(local_bytes);
     Py_DECREF(local_unicode);
+    Py_DECREF(local_legacy_unicode);
+    Py_DECREF(local_legacy_unicode_ready);
     Py_DECREF(local_list);
     Py_DECREF(local_tuple);
     Py_DECREF(local_dict);
