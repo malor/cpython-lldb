@@ -25,20 +25,7 @@ fc()
 
 
 def test_locals(lldb):
-    # this could be replaced with a regex, but a plain string seems to be more readable
-    expected_py2 = """\
-a = 42
-args = (1, 2, 3)
-b = [1, u'hello', u'\\u0442\\u0435\\u0441\\u0442']
-c = ([1], 2, [[3]])
-d = u'test'
-e = {u'a': -1}
-eggs = 42
-kwargs = {u'foo': 'spam'}
-spam = u'foobar'
-""".rstrip()
-
-    expected_py3 = """\
+    expected = """\
 a = 42
 args = (1, 2, 3)
 b = [1, 'hello', 'тест']
@@ -57,7 +44,7 @@ spam = 'foobar'
     )[-1]
     actual = response.rstrip()
 
-    assert (actual == expected_py2) or (actual == expected_py3)
+    assert actual == expected
 
 
 def test_globals(lldb):
