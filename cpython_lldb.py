@@ -200,20 +200,12 @@ class PyUnicodeObject(PyObject):
 
     @property
     def value(self):
-        str_type = self.target.FindFirstType(self.cpython_struct)
+        ascii_type = self.target.FindFirstType("PyASCIIObject")
+        value = self.deref.Cast(ascii_type)
 
-        value = self.deref.Cast(str_type)
-        length = (
-            value.GetChildMemberWithName("_base")
-            .GetChildMemberWithName("_base")
-            .GetChildMemberWithName("length")
-            .unsigned
-        )
-        state = (
-            value.GetChildMemberWithName("_base")
-            .GetChildMemberWithName("_base")
-            .GetChildMemberWithName("state")
-        )
+        length = value.GetChildMemberWithName("length").unsigned
+        state = value.GetChildMemberWithName("state")
+
         compact = bool(state.GetChildMemberWithName("compact").unsigned)
         is_ascii = bool(state.GetChildMemberWithName("ascii").unsigned)
         kind = state.GetChildMemberWithName("kind").unsigned
@@ -222,16 +214,18 @@ class PyUnicodeObject(PyObject):
         # Reference: PEP 393 and Include/cpython/unicodeobject.h.
         if is_ascii and compact and ready:
             # content is stored right after the data structure in memory
-            ascii_type = self.target.FindFirstType("PyASCIIObject")
-            value = value.Cast(ascii_type)
             addr = value.address_of.unsigned + value.size
         elif compact and ready:
             # content is stored right after the data structure in memory
             compact_type = self.target.FindFirstType("PyCompactUnicodeObject")
+
             value = value.Cast(compact_type)
             addr = value.address_of.unsigned + value.size
         elif ready:
             # legacy string, "ready" (content is stored in the `data.any` field)
+            str_type = self.target.FindFirstType("PyUnicodeObject")
+
+            value = value.Cast(str_type)
             addr = (
                 value.GetChildMemberWithName("data")
                 .GetChildMemberWithName("any")
@@ -239,8 +233,10 @@ class PyUnicodeObject(PyObject):
             )
         else:
             # legacy string, "not ready" (content is stored in the `wstr` field)
+            str_type = self.target.FindFirstType("PyUnicodeObject")
             wchar_type = self.target.FindFirstType("wchar_t")
 
+            value = value.Cast(str_type)
             addr = (
                 value.GetChildMemberWithName("_base")
                 .GetChildMemberWithName("_base")
