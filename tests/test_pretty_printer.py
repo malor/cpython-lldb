@@ -12,7 +12,6 @@ def lldb_repr_from_frame(lldb_manager, value):
     # value will be pretty-printed by `frame info` command.
     code = f"""
         from collections import *
-        from six.moves import *
 
         import test_extension
         test_extension.identity({value})
@@ -307,20 +306,7 @@ def test_locals_c_extension(lldb):
     if frame_match:
         frame_index = int(frame_match.groups()[0])
 
-    # this could be replaced with a regex, but a plain string seems to be more readable
-    expected_py2 = """\
-(PyBytesObject *) local_bytes = 'eggs'
-(PyDictObject *) local_dict = {u'foo': 42}
-(PyFloatObject *) local_float = 0.0
-(PyListObject *) local_list = [17, 18, 19]
-(PyLongObject *) local_long = 17
-(PyTupleObject *) local_tuple = (24, 23, 22)
-(PyUnicodeObject *) local_legacy_unicode = u'привіт'
-(PyUnicodeObject *) local_legacy_unicode_ready = u'світ'
-(PyUnicodeObject *) local_unicode = u'hello'
-""".rstrip()
-
-    expected_py3 = """\
+    expected = """\
 (PyBytesObject *) local_bytes = b'eggs'
 (PyDictObject *) local_dict = {'foo': 42}
 (PyFloatObject *) local_float = 0.0
@@ -346,4 +332,4 @@ def test_locals_c_extension(lldb):
         )
     )
 
-    assert (actual == expected_py2) or (actual == expected_py3)
+    assert actual == expected

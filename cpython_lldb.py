@@ -2,13 +2,11 @@ import abc
 import argparse
 import collections
 import io
-import locale
 import re
 import shlex
 import struct
 
 import lldb
-import six
 
 
 ENCODING_RE = re.compile(r"^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
@@ -664,7 +662,7 @@ class PyFrameObject(PyObject):
         Extract PyFrameObject object from current frame w/o stack walking.
         """
         f = frame.variables["f"]
-        if f and is_available(f[0]):
+        if f and f[0].error.Success():
             return cls(f[0])
         else:
             return None
@@ -799,8 +797,7 @@ class PyFrameObject(PyObject):
 # Commands
 
 
-@six.add_metaclass(abc.ABCMeta)
-class Command(object):
+class Command(metaclass=abc.ABCMeta):
     """Base class for py-* command implementations.
 
     Takes care of commands registration and error handling.
@@ -827,8 +824,6 @@ class Command(object):
             self.execute(debugger, args, result)
         except Exception as e:
             msg = "Failed to execute command `{}`: {}".format(self.command, e)
-            if six.PY2:
-                msg = msg.encode("utf-8")
 
             result.SetError(msg)
 
@@ -849,7 +844,8 @@ class Command(object):
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def command(self):
         """Command name.
 
@@ -893,10 +889,10 @@ class PyBt(Command):
             lines.append("    " + pyframe.line.strip())
 
         if lines:
-            write_string(result, "Traceback (most recent call last):")
-            write_string(result, "\n".join(lines))
+            write_line(result, "Traceback (most recent call last):")
+            write_line(result, "\n".join(lines))
         else:
-            write_string(result, "No Python traceback found")
+            write_line(result, "No Python traceback found")
 
 
 class PyList(Command):
@@ -955,13 +951,13 @@ class PyList(Command):
         # of lines instead of the context around the line that is being executed
         linenum_range = args.linenum
         if len(linenum_range) > 2:
-            write_string(result, "Usage: py-list [start [end]]")
+            write_line(result, "Usage: py-list [start [end]]")
             return
 
         # find the most recent Python frame in the callstack of the selected thread
         current_frame = select_closest_python_frame(debugger)
         if current_frame is None:
-            write_string(result, "<source code is not available>")
+            write_line(result, "<source code is not available>")
             return
 
         # determine the location of the module and the exact line that is currently
@@ -981,9 +977,9 @@ class PyList(Command):
                 else:
                     prefix = "{}".format(i)
 
-                write_string(result, "{:>5}    {}".format(prefix, line.rstrip()))
+                write_line(result, "{:>5}    {}".format(prefix, line.rstrip()))
         except IOError:
-            write_string(result, "<source code is not available>")
+            write_line(result, "<source code is not available>")
 
 
 class PyUp(Command):
@@ -996,7 +992,7 @@ class PyUp(Command):
 
         new_frame = move_python_frame(debugger, direction=Direction.UP)
         if new_frame is None:
-            write_string(result, "*** Oldest frame")
+            write_line(result, "*** Oldest frame")
         else:
             print_frame_summary(result, new_frame)
 
@@ -1011,7 +1007,7 @@ class PyDown(Command):
 
         new_frame = move_python_frame(debugger, direction=Direction.DOWN)
         if new_frame is None:
-            write_string(result, "*** Newest frame")
+            write_line(result, "*** Newest frame")
         else:
             print_frame_summary(result, new_frame)
 
@@ -1024,7 +1020,7 @@ class PyLocals(Command):
     def execute(self, debugger, args, result):
         current_frame = select_closest_python_frame(debugger, direction=Direction.UP)
         if current_frame is None:
-            write_string(result, "No locals found (symbols might be missing!)")
+            write_line(result, "No locals found (symbols might be missing!)")
             return
 
         # merge logic is based on the implementation of PyFrame_LocalsToFast()
@@ -1049,7 +1045,7 @@ class PyLocals(Command):
                 merged_locals.pop(name, None)
 
         for name in sorted(merged_locals.keys()):
-            write_string(result, "{} = {}".format(name, repr(merged_locals[name])))
+            write_line(result, "{} = {}".format(name, repr(merged_locals[name])))
 
 
 # Helpers
@@ -1063,8 +1059,8 @@ class Direction(object):
 def print_frame_summary(result, frame):
     """Print a short summary of a given Python frame: module and the line being executed."""
 
-    write_string(result, "  " + frame.to_pythonlike_string())
-    write_string(result, "    " + frame.line.strip())
+    write_line(result, "  " + frame.to_pythonlike_string())
+    write_line(result, "    " + frame.line.strip())
 
 
 def select_closest_python_frame(debugger, direction=Direction.UP):
@@ -1100,20 +1096,8 @@ def move_python_frame(debugger, direction):
             return python_frame
 
 
-def write_string(result, string, end="\n", encoding=locale.getpreferredencoding()):
-    """Helper function for writing to SBCommandReturnObject that expects bytes on py2 and str on py3."""
-
-    if six.PY3:
-        result.write(string + end)
-    else:
-        result.write((string + end).encode(encoding=encoding))
-
-
-def is_available(lldb_value):
-    """
-    Helper function to check if a variable is available and was not optimized out.
-    """
-    return lldb_value.error.Success()
+def write_line(result, string):
+    result.write(string + "\n")
 
 
 def source_file_encoding(filename):
