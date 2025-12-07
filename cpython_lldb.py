@@ -72,13 +72,6 @@ class PyObject(object):
     def process(self):
         return self.lldb_value.GetProcess()
 
-    @property
-    def deref(self):
-        if self.lldb_value.TypeIsPointerType():
-            return self.lldb_value.deref
-        else:
-            return self.lldb_value
-
 
 class PyLongObject(PyObject):
     typename = "int"
@@ -106,7 +99,7 @@ class PyLongObject(PyObject):
         digit_type = self.target.FindFirstType("digit")
 
         shift = 15 if digit_type.size == 2 else 30
-        value = self.deref.Cast(long_type)
+        value = self.lldb_value.Cast(long_type.GetPointerType())
         size = (
             value.GetChildMemberWithName("ob_base")
             .GetChildMemberWithName("ob_size")
@@ -130,7 +123,7 @@ class PyBoolObject(PyObject):
     def value(self):
         long_type = self.target.FindFirstType("PyLongObject")
 
-        value = self.deref.Cast(long_type)
+        value = self.lldb_value.Cast(long_type.GetPointerType())
         digits = value.GetChildMemberWithName("ob_digit")
         return bool(digits.GetChildAtIndex(0).unsigned)
 
@@ -143,7 +136,7 @@ class PyFloatObject(PyObject):
     def value(self):
         float_type = self.target.FindFirstType(self.cpython_struct)
 
-        value = self.deref.Cast(float_type)
+        value = self.lldb_value.Cast(float_type.GetPointerType())
         fval = value.GetChildMemberWithName("ob_fval")
         return float(fval.GetValue())
 
@@ -156,7 +149,7 @@ class PyBytesObject(PyObject):
     def value(self):
         bytes_type = self.target.FindFirstType(self.cpython_struct)
 
-        value = self.deref.Cast(bytes_type)
+        value = self.lldb_value.Cast(bytes_type.GetPointerType())
         size = (
             value.GetChildMemberWithName("ob_base")
             .GetChildMemberWithName("ob_size")
@@ -200,20 +193,12 @@ class PyUnicodeObject(PyObject):
 
     @property
     def value(self):
-        str_type = self.target.FindFirstType(self.cpython_struct)
+        ascii_type = self.target.FindFirstType("PyASCIIObject")
+        value = self.lldb_value.Cast(ascii_type.GetPointerType())
 
-        value = self.deref.Cast(str_type)
-        length = (
-            value.GetChildMemberWithName("_base")
-            .GetChildMemberWithName("_base")
-            .GetChildMemberWithName("length")
-            .unsigned
-        )
-        state = (
-            value.GetChildMemberWithName("_base")
-            .GetChildMemberWithName("_base")
-            .GetChildMemberWithName("state")
-        )
+        length = value.GetChildMemberWithName("length").unsigned
+        state = value.GetChildMemberWithName("state")
+
         compact = bool(state.GetChildMemberWithName("compact").unsigned)
         is_ascii = bool(state.GetChildMemberWithName("ascii").unsigned)
         kind = state.GetChildMemberWithName("kind").unsigned
@@ -222,16 +207,18 @@ class PyUnicodeObject(PyObject):
         # Reference: PEP 393 and Include/cpython/unicodeobject.h.
         if is_ascii and compact and ready:
             # content is stored right after the data structure in memory
-            ascii_type = self.target.FindFirstType("PyASCIIObject")
-            value = value.Cast(ascii_type)
-            addr = value.address_of.unsigned + value.size
+            addr = value.unsigned + ascii_type.size
         elif compact and ready:
             # content is stored right after the data structure in memory
             compact_type = self.target.FindFirstType("PyCompactUnicodeObject")
-            value = value.Cast(compact_type)
-            addr = value.address_of.unsigned + value.size
+
+            value = self.lldb_value.Cast(compact_type.GetPointerType())
+            addr = value.unsigned + compact_type.size
         elif ready:
             # legacy string, "ready" (content is stored in the `data.any` field)
+            str_type = self.target.FindFirstType("PyUnicodeObject")
+
+            value = self.lldb_value.Cast(str_type.GetPointerType())
             addr = (
                 value.GetChildMemberWithName("data")
                 .GetChildMemberWithName("any")
@@ -239,8 +226,10 @@ class PyUnicodeObject(PyObject):
             )
         else:
             # legacy string, "not ready" (content is stored in the `wstr` field)
+            str_type = self.target.FindFirstType("PyUnicodeObject")
             wchar_type = self.target.FindFirstType("wchar_t")
 
+            value = self.lldb_value.Cast(str_type.GetPointerType())
             addr = (
                 value.GetChildMemberWithName("_base")
                 .GetChildMemberWithName("_base")
@@ -266,7 +255,7 @@ class PyNoneObject(PyObject):
 class _PySequence(object):
     @property
     def value(self):
-        value = self.deref.Cast(self.lldb_type)
+        value = self.lldb_value.Cast(self.lldb_type.GetPointerType())
         size = (
             value.GetChildMemberWithName("ob_base")
             .GetChildMemberWithName("ob_size")
@@ -306,10 +295,12 @@ class _PySetObject(object):
     def value(self):
         set_type = self.target.FindFirstType(self.cpython_struct)
 
-        value = self.deref.Cast(set_type)
+        value = self.lldb_value.Cast(set_type.GetPointerType())
         size = value.GetChildMemberWithName("mask").unsigned + 1
         table = value.GetChildMemberWithName("table")
-        array = table.deref.Cast(table.type.GetPointeeType().GetArrayType(size))
+        array = table.Cast(
+            table.type.GetPointeeType().GetArrayType(size).GetPointerType()
+        )
 
         rv = set()
         for i in range(size):
@@ -339,12 +330,11 @@ class PyFrozenSetObject(_PySetObject, PyObject):
 class _PyDictObject(object):
     @property
     def value(self):
-        byte_type = self.target.FindFirstType("char")
         dict_type = self.target.FindFirstType("PyDictObject")
         dictentry_type = self.target.FindFirstType("PyDictKeyEntry")
         object_type = self.target.FindFirstType("PyObject")
 
-        value = self.deref.Cast(dict_type)
+        value = self.lldb_value.Cast(dict_type.GetPointerType()).deref
 
         ma_keys = value.GetChildMemberWithName("ma_keys")
         num_entries = ma_keys.GetChildMemberWithName("dk_nentries").unsigned
@@ -355,8 +345,7 @@ class _PyDictObject(object):
             table_size = 1 << dk_log2_size.unsigned
         else:
             # CPython version < 3.11
-            dk_size = ma_keys.GetChildMemberWithName("dk_size")
-            table_size = dk_size.unsigned
+            table_size = ma_keys.GetChildMemberWithName("dk_size").unsigned
 
         # hash table effectively stores indexes of entries in the key/value
         # pairs array; the size of an index varies, so that all possible
@@ -375,12 +364,9 @@ class _PyDictObject(object):
         if indices.IsValid():
             # CPython version >= 3.6
             # entries are stored in an array right after the indexes table
-            entries = (
-                indices.Cast(byte_type.GetArrayType(shift))
-                .GetChildAtIndex(shift, 0, True)
-                .AddressOf()
-                .Cast(dictentry_type.GetPointerType())
-                .deref.Cast(dictentry_type.GetArrayType(num_entries))
+            addr = lldb.SBAddress(indices.AddressOf().unsigned + shift, self.target)
+            entries = self.target.CreateValueFromAddress(
+                "entries", addr, dictentry_type.GetArrayType(num_entries)
             )
         else:
             # CPython version < 3.6
@@ -390,7 +376,7 @@ class _PyDictObject(object):
             )
 
         ma_values = value.GetChildMemberWithName("ma_values")
-        if ma_values.unsigned:
+        if ma_values.unsigned != 0:
             is_split = True
             ma_values = ma_values.deref.Cast(
                 object_type.GetPointerType().GetArrayType(num_entries)
@@ -440,7 +426,7 @@ class Defaultdict(PyObject):
     @property
     def value(self):
         dict_type = self.target.FindFirstType("defdictobject")
-        value = self.deref.Cast(dict_type)
+        value = self.lldb_value.Cast(dict_type.GetPointerType()).deref
         # for the time being, let's just convert it to a regular dict,
         # as we can't properly display the repr of the default_factory
         # anyway, because in order to do that we would need to execute
@@ -1178,7 +1164,9 @@ def register_summaries(debugger):
     # normally, PyObject instances are referenced via a generic PyObject* pointer.
     # pretty_printer() will read the value of ob_type->tp_name to determine the
     # concrete type of the object being inspected
-    debugger.HandleCommand("type summary add -F cpython_lldb.pretty_printer PyObject")
+    debugger.HandleCommand(
+        "type summary add -F cpython_lldb.pretty_printer PyObject _object"
+    )
 
     # at the same time, built-in types can be referenced directly via pointers to
     # CPython structs. In this case, we also want to be able to print type summaries
