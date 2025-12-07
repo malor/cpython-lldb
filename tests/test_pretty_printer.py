@@ -152,8 +152,9 @@ def test_frozenset(lldb):
 
 def test_dict(lldb):
     assert_lldb_repr(lldb, {}, "{}")
+    assert_lldb_repr(lldb, {"a": "b", "ґ": "ї"}, "{'ґ': 'ї'}")
     assert_lldb_repr(lldb, {1: 2, 3: 4}, "{1: 2, 3: 4}")
-    assert_lldb_repr(lldb, {1: 2, "a": "b"}, "{1: 2, u'a': u'b'}")
+    assert_lldb_repr(lldb, {1: 2, "a": "b"}, "{1: 2, 'a': 'b'}")
     assert_lldb_repr(
         lldb,
         {i: i for i in range(16)},
