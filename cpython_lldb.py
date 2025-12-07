@@ -328,10 +328,38 @@ class PyFrozenSetObject(_PySetObject, PyObject):
 
 
 class _PyDictObject(object):
+    DICT_KEYS_GENERAL = 0
+    DICT_KEYS_UNICODE = 1
+    DICT_KEYS_SPLIT = 2
+
+    @staticmethod
+    def _get_table_size(ma_keys):
+        dk_log2_size = ma_keys.GetChildMemberWithName("dk_log2_size")
+        if dk_log2_size.IsValid():
+            # CPython version >= 3.11
+            table_size = 1 << dk_log2_size.unsigned
+        else:
+            table_size = ma_keys.GetChildMemberWithName("dk_size").unsigned
+
+        return table_size
+
+    @staticmethod
+    def _get_dictentry_type(target, ma_keys):
+        dk_kind = ma_keys.GetChildMemberWithName("dk_kind")
+        if dk_kind.IsValid():
+            # CPython version >= 3.11
+            kind = dk_kind.unsigned
+        else:
+            kind = _PyDictObject.DICT_KEYS_GENERAL
+
+        if kind == _PyDictObject.DICT_KEYS_GENERAL:
+            return target.FindFirstType("PyDictKeyEntry")
+        else:
+            return target.FindFirstType("PyDictUnicodeEntry")
+
     @property
     def value(self):
         dict_type = self.target.FindFirstType("PyDictObject")
-        dictentry_type = self.target.FindFirstType("PyDictKeyEntry")
         object_type = self.target.FindFirstType("PyObject")
 
         value = self.lldb_value.Cast(dict_type.GetPointerType()).deref
@@ -339,13 +367,8 @@ class _PyDictObject(object):
         ma_keys = value.GetChildMemberWithName("ma_keys")
         num_entries = ma_keys.GetChildMemberWithName("dk_nentries").unsigned
 
-        dk_log2_size = ma_keys.GetChildMemberWithName("dk_log2_size")
-        if dk_log2_size.IsValid():
-            # CPython version >= 3.11
-            table_size = 1 << dk_log2_size.unsigned
-        else:
-            # CPython version < 3.11
-            table_size = ma_keys.GetChildMemberWithName("dk_size").unsigned
+        table_size = _PyDictObject._get_table_size(ma_keys)
+        dictentry_type = _PyDictObject._get_dictentry_type(self.target, ma_keys)
 
         # hash table effectively stores indexes of entries in the key/value
         # pairs array; the size of an index varies, so that all possible
