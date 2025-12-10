@@ -658,12 +658,120 @@ class PyCodeObject(PyObject):
         return lineno
 
 
-class PyFrameObject(PyObject):
+class PyFrame(metaclass=abc.ABCMeta):
+    @property
+    @abc.abstractmethod
+    def name(self) -> str:
+        """Name of the function being executed."""
+
+    @property
+    @abc.abstractmethod
+    def file_name(self) -> str:
+        """Name of the file being executed."""
+
+    @property
+    @abc.abstractmethod
+    def line(self) -> str:
+        """Line of code being executed (content)."""
+
+    @property
+    @abc.abstractmethod
+    def line_number(self) -> int:
+        """Line of code being executed (number)."""
+
+    @property
+    @abc.abstractmethod
+    def locals(self) -> dict[str, PyObject]:
+        """Local variables of the function being executed."""
+
+    def to_pythonlike_string(self) -> str:
+        return f'File "{self.file_name}", line {self.line_number}, in {self.name}'
+
+
+class PyFrameObject(PyObject, PyFrame):
     typename = "frame"
 
     def __init__(self, lldb_value):
         super(PyFrameObject, self).__init__(lldb_value)
         self.co = PyCodeObject(self.child("f_code"))
+
+    @classmethod
+    def from_frame(cls, frame):
+        if frame is None:
+            return None
+
+        # check if we are in a potential function
+        if frame.name not in ("_PyEval_EvalFrameDefault", "PyEval_EvalFrameEx"):
+            return None
+
+        # try different methods of getting PyFrameObject before giving up
+        methods = (
+            # normally, we just need to check the location of `f` variable in the current frame
+            cls._from_frame_no_walk,
+            # but sometimes, it's only available in the parent frame
+            lambda frame: frame.parent and cls._from_frame_no_walk(frame.parent),
+            # when aggressive optimizations are enabled, we need to check the CPU registers
+            cls._from_frame_heuristic,
+            # and the registers in the parent frame as well
+            lambda frame: frame.parent and cls._from_frame_heuristic(frame.parent),
+        )
+        for method in methods:
+            result = method(frame)
+            if result is not None:
+                return result
+
+    @property
+    def name(self):
+        return PyObject.from_value(self.co.child("co_name")).value
+
+    @property
+    def file_name(self):
+        return PyObject.from_value(self.co.child("co_filename")).value
+
+    @property
+    def line(self):
+        try:
+            encoding = source_file_encoding(self.file_name)
+            return source_file_lines(
+                self.file_name,
+                self.line_number,
+                self.line_number + 1,
+                encoding=encoding,
+            )[0]
+        except (IOError, IndexError):
+            return "<source code is not available>"
+
+    @property
+    def line_number(self):
+        f_lineno = self.child("f_lineno").signed
+        f_lasti = self.child("f_lasti").signed
+
+        return self.co.addr2line(f_lineno, f_lasti)
+
+    @property
+    def locals(self):
+        # merge logic is based on the implementation of PyFrame_LocalsToFast()
+        merged_locals = {}
+
+        # f_locals contains top-level declarations (e.g. functions or classes)
+        # of a frame executing a Python module, rather than a function
+        f_locals = self.child("f_locals")
+        if f_locals.unsigned != 0:
+            for k, v in PyDictObject(f_locals).value.items():
+                merged_locals[k.value] = v
+
+        # f_localsplus stores local variables and arguments of function frames
+        fast_locals = self.child("f_localsplus")
+        f_code = PyCodeObject(self.child("f_code"))
+        varnames = PyTupleObject(f_code.child("co_varnames"))
+        for i, name in enumerate(varnames.value):
+            value = fast_locals.GetChildAtIndex(i, 0, True)
+            if value.unsigned != 0:
+                merged_locals[name.value] = PyObject.from_value(value)
+            else:
+                merged_locals.pop(name, None)
+
+        return merged_locals
 
     @classmethod
     def _from_frame_no_walk(cls, frame):
@@ -732,75 +840,6 @@ class PyFrameObject(PyObject):
 
         if eligible_frames:
             return eligible_frames[0]
-
-    @classmethod
-    def from_frame(cls, frame):
-        if frame is None:
-            return None
-
-        # check if we are in a potential function
-        if frame.name not in ("_PyEval_EvalFrameDefault", "PyEval_EvalFrameEx"):
-            return None
-
-        # try different methods of getting PyFrameObject before giving up
-        methods = (
-            # normally, we just need to check the location of `f` variable in the current frame
-            cls._from_frame_no_walk,
-            # but sometimes, it's only available in the parent frame
-            lambda frame: frame.parent and cls._from_frame_no_walk(frame.parent),
-            # when aggressive optimizations are enabled, we need to check the CPU registers
-            cls._from_frame_heuristic,
-            # and the registers in the parent frame as well
-            lambda frame: frame.parent and cls._from_frame_heuristic(frame.parent),
-        )
-        for method in methods:
-            result = method(frame)
-            if result is not None:
-                return result
-
-    @classmethod
-    def get_pystack(cls, thread):
-        pyframes = []
-
-        frame = thread.GetSelectedFrame()
-        while frame:
-            pyframe = cls.from_frame(frame)
-            if pyframe is not None:
-                pyframes.append(pyframe)
-
-            frame = frame.get_parent_frame()
-
-        return pyframes
-
-    @property
-    def filename(self):
-        return PyObject.from_value(self.co.child("co_filename")).value
-
-    @property
-    def line_number(self):
-        f_lineno = self.child("f_lineno").signed
-        f_lasti = self.child("f_lasti").signed
-
-        return self.co.addr2line(f_lineno, f_lasti)
-
-    @property
-    def line(self):
-        try:
-            encoding = source_file_encoding(self.filename)
-            return source_file_lines(
-                self.filename, self.line_number, self.line_number + 1, encoding=encoding
-            )[0]
-        except (IOError, IndexError):
-            return "<source code is not available>"
-
-    def to_pythonlike_string(self):
-        lineno = self.line_number
-        co_name = PyObject.from_value(self.co.child("co_name")).value
-        return 'File "{filename}", line {lineno}, in {co_name}'.format(
-            filename=self.filename,
-            co_name=co_name,
-            lineno=lineno,
-        )
 
 
 # Commands
@@ -890,7 +929,7 @@ class PyBt(Command):
         target = debugger.GetSelectedTarget()
         thread = target.GetProcess().GetSelectedThread()
 
-        pystack = PyFrameObject.get_pystack(thread)
+        pystack = get_pystack(thread)
 
         lines = []
         for pyframe in reversed(pystack):
@@ -971,14 +1010,14 @@ class PyList(Command):
 
         # determine the location of the module and the exact line that is currently
         # being executed
-        filename = current_frame.filename
+        file_name = current_frame.file_name
         current_line_num = current_frame.line_number
 
         # default to showing the context around the current line, unless overridden
         start, end = PyList.linenum_range(current_line_num, linenum_range)
         try:
-            encoding = source_file_encoding(filename)
-            lines = source_file_lines(filename, start, end + 1, encoding=encoding)
+            encoding = source_file_encoding(file_name)
+            lines = source_file_lines(file_name, start, end + 1, encoding=encoding)
             for i, line in enumerate(lines, start):
                 # highlight the current line
                 if i == current_line_num:
@@ -1032,29 +1071,8 @@ class PyLocals(Command):
             write_line(result, "No locals found (symbols might be missing!)")
             return
 
-        # merge logic is based on the implementation of PyFrame_LocalsToFast()
-        merged_locals = {}
-
-        # f_locals contains top-level declarations (e.g. functions or classes)
-        # of a frame executing a Python module, rather than a function
-        f_locals = current_frame.child("f_locals")
-        if f_locals.unsigned != 0:
-            for k, v in PyDictObject(f_locals).value.items():
-                merged_locals[k.value] = v
-
-        # f_localsplus stores local variables and arguments of function frames
-        fast_locals = current_frame.child("f_localsplus")
-        f_code = PyCodeObject(current_frame.child("f_code"))
-        varnames = PyTupleObject(f_code.child("co_varnames"))
-        for i, name in enumerate(varnames.value):
-            value = fast_locals.GetChildAtIndex(i, 0, True)
-            if value.unsigned != 0:
-                merged_locals[name.value] = PyObject.from_value(value).value
-            else:
-                merged_locals.pop(name, None)
-
-        for name in sorted(merged_locals.keys()):
-            write_line(result, "{} = {}".format(name, repr(merged_locals[name])))
+        for name in sorted(current_frame.locals.keys()):
+            write_line(result, "{} = {}".format(name, repr(current_frame.locals[name])))
 
 
 # Helpers
@@ -1063,6 +1081,22 @@ class PyLocals(Command):
 class Direction(object):
     DOWN = -1
     UP = 1
+
+
+def get_pystack(thread):
+    """Return the chain of application level call frames for the given thread."""
+
+    pyframes = []
+
+    frame = thread.GetSelectedFrame()
+    while frame:
+        pyframe = PyFrameObject.from_frame(frame)
+        if pyframe is not None:
+            pyframes.append(pyframe)
+
+        frame = frame.get_parent_frame()
+
+    return pyframes
 
 
 def print_frame_summary(result, frame):
@@ -1109,10 +1143,10 @@ def write_line(result, string):
     result.write(string + "\n")
 
 
-def source_file_encoding(filename):
+def source_file_encoding(file_name):
     """Determine the text encoding of a Python source file."""
 
-    with io.open(filename, "rt", encoding="latin-1") as f:
+    with io.open(file_name, "rt", encoding="latin-1") as f:
         # according to PEP-263 the magic comment must be placed on one of the first two lines
         for _ in range(2):
             line = f.readline()
@@ -1124,14 +1158,14 @@ def source_file_encoding(filename):
     return "utf-8"
 
 
-def source_file_lines(filename, start, end, encoding="utf-8"):
+def source_file_lines(file_name, start, end, encoding="utf-8"):
     """Return the contents of [start; end) lines of the source file.
 
     1 based indexing is used for convenience.
     """
 
     lines = []
-    with io.open(filename, "rt", encoding=encoding) as f:
+    with io.open(file_name, "rt", encoding=encoding) as f:
         for line_num, line in enumerate(f, 1):
             if start <= line_num < end:
                 lines.append(line)
