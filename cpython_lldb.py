@@ -1,10 +1,12 @@
 import abc
 import argparse
 import collections
+import dataclasses
 import io
 import re
 import shlex
 import struct
+import typing as t
 
 import lldb
 
@@ -603,6 +605,14 @@ class PyCodeAddressRange(object):
 class PyCodeObject(PyObject):
     typename = "code"
 
+    @property
+    def co_firstlineno(self) -> int:
+        return self.child("co_firstlineno").unsigned
+
+    @property
+    def co_linetable(self) -> PyBytesObject:
+        return PyBytesObject(self.child("co_linetable"))
+
     def addr2line(self, f_lineno, f_lasti):
         addr_range_type = self.target.FindFirstType("PyCodeAddressRange")
         if addr_range_type.IsValid():
@@ -670,9 +680,19 @@ class PyFrame(metaclass=abc.ABCMeta):
         """Name of the file being executed."""
 
     @property
-    @abc.abstractmethod
     def line(self) -> str:
         """Line of code being executed (content)."""
+
+        try:
+            encoding = source_file_encoding(self.file_name)
+            return source_file_lines(
+                self.file_name,
+                self.line_number,
+                self.line_number + 1,
+                encoding=encoding,
+            )[0]
+        except (IOError, IndexError):
+            return "<source code is not available>"
 
     @property
     @abc.abstractmethod
@@ -727,19 +747,6 @@ class PyFrameObject(PyObject, PyFrame):
     @property
     def file_name(self):
         return PyObject.from_value(self.co.child("co_filename")).value
-
-    @property
-    def line(self):
-        try:
-            encoding = source_file_encoding(self.file_name)
-            return source_file_lines(
-                self.file_name,
-                self.line_number,
-                self.line_number + 1,
-                encoding=encoding,
-            )[0]
-        except (IOError, IndexError):
-            return "<source code is not available>"
 
     @property
     def line_number(self):
@@ -842,6 +849,162 @@ class PyFrameObject(PyObject, PyFrame):
             return eligible_frames[0]
 
 
+class PyInterpreterFrame(PyFrame):
+    def __init__(self, value: lldb.SBValue):
+        self.lldb_value = value
+
+    @staticmethod
+    def from_value(value: lldb.SBValue) -> t.Optional[PyFrame]:
+        if (
+            value.IsValid()
+            and value.type.GetPointeeType().name == "_PyInterpreterFrame"
+        ):
+            return PyInterpreterFrame(value)
+
+    @property
+    def name(self) -> str:
+        """Name of the function being executed."""
+
+        return PyObject.from_value(
+            self.lldb_value.GetChildMemberWithName("f_func").GetChildMemberWithName(
+                "func_name"
+            )
+        ).value
+
+    @property
+    def file_name(self) -> str:
+        """Name of the file being executed."""
+
+        return PyObject.from_value(
+            self.lldb_value.GetChildMemberWithName("f_code").GetChildMemberWithName(
+                "co_filename"
+            )
+        ).value
+
+    @property
+    def line_number(self) -> int:
+        """Line of code being executed (number)."""
+
+        f_code = PyCodeObject(self.lldb_value.GetChildMemberWithName("f_code"))
+
+        addr = self._f_lasti
+        if addr < 0:
+            return f_code.child("co_firstlineno").unsigned
+
+        for location in LocationTable(f_code):
+            if addr in location and location.line is not None:
+                return location.line
+
+        return -1
+
+    @property
+    def locals(self) -> dict[str, PyObject]:
+        """Local variables of the function being executed."""
+
+        raise NotImplementedError
+
+    @property
+    def _f_lasti(self) -> int:
+        codeunit_type = self.lldb_value.target.FindFirstType("_Py_CODEUNIT")
+
+        prev_instr = self.lldb_value.GetChildMemberWithName("prev_instr")
+        first_instr = (
+            self.lldb_value.GetChildMemberWithName("f_code")
+            .GetChildMemberWithName("co_code_adaptive")
+            .AddressOf()
+        )
+
+        return int((prev_instr.unsigned - first_instr.unsigned) / codeunit_type.size)
+
+
+@dataclasses.dataclass
+class Location:
+    start_addr: int
+    end_addr: int
+    line: t.Optional[int]
+
+    def __contains__(self, addr: int) -> bool:
+        return self.start_addr <= addr < self.end_addr
+
+
+class LocationTable:
+    """Compact representation of a code unit to location mapping.
+
+    See https://github.com/python/cpython/blob/3.11/Objects/locations.md for details.
+    """
+
+    class Code:
+        SHORT_FORM = range(0, 10)
+        ONELINE_FORM = range(10, 13)
+        NO_COLUMN_INFO = range(13, 14)
+        LONG_FORM = range(14, 15)
+        NO_LOCATION = range(15, 16)
+
+    def __init__(self, f_code: PyCodeObject):
+        self.current_addr = 0
+        self.current_line = f_code.co_firstlineno
+        self.it = iter(f_code.co_linetable.value)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> Location:
+        header = next(self.it)
+
+        marker = (header & 0b1000_0000) >> 7
+        code = (header & 0b0111_1000) >> 3
+        length = (header & 0b0000_0111) + 1
+
+        assert marker == 1
+
+        start_addr = self.current_addr
+        end_addr = start_addr + length
+        line = self.current_line
+
+        if code in LocationTable.Code.SHORT_FORM:
+            # ignore column information
+            _ = next(self.it)
+        elif code in LocationTable.Code.ONELINE_FORM:
+            # ignore column information
+            _ = next(self.it)
+            _ = next(self.it)
+
+            line = line + (code - 10)
+        elif code in LocationTable.Code.NO_COLUMN_INFO:
+            line = line + self._read_signed_varint()
+        elif code in LocationTable.Code.LONG_FORM:
+            line = line + self._read_signed_varint()
+            # ignore column information
+            _ = self._read_varint()
+            _ = self._read_varint()
+            _ = self._read_varint()
+        elif code in LocationTable.Code.NO_LOCATION:
+            line = None
+        else:
+            raise ValueError(f"Unexpected code value: {code}")
+
+        self.current_addr = end_addr
+        self.current_line = line if line is not None else self.current_line
+        return Location(start_addr, end_addr, line)
+
+    def _read_varint(self):
+        b = next(self.it)
+        val = b & 0b0011_1111
+        shift = 0
+        while b & 0b0100_0000:
+            b = next(self.it)
+            shift += 6
+            val |= (b & 0b0011_1111) << shift
+        return val
+
+    def _read_signed_varint(self):
+        uval = self._read_varint()
+        if uval & 0b0000_0001:
+            return -(uval >> 1)
+        else:
+            return uval >> 1
+
+
 # Commands
 
 
@@ -929,7 +1092,7 @@ class PyBt(Command):
         target = debugger.GetSelectedTarget()
         thread = target.GetProcess().GetSelectedThread()
 
-        pystack = get_pystack(thread)
+        pystack = get_pystack(target, thread)
 
         lines = []
         for pyframe in reversed(pystack):
@@ -1083,20 +1246,50 @@ class Direction(object):
     UP = 1
 
 
-def get_pystack(thread):
-    """Return the chain of application level call frames for the given thread."""
-
-    pyframes = []
+def _get_stack_trace(thread: lldb.SBThread) -> list[lldb.SBFrame]:
+    frames = []
 
     frame = thread.GetSelectedFrame()
     while frame:
-        pyframe = PyFrameObject.from_frame(frame)
-        if pyframe is not None:
-            pyframes.append(pyframe)
+        frames.append(frame)
 
         frame = frame.get_parent_frame()
 
-    return pyframes
+    return frames
+
+
+def get_pystack(target: lldb.SBTarget, thread: lldb.SBThread) -> list[PyFrame]:
+    """Return the chain of application level call frames for the given thread."""
+
+    frames = _get_stack_trace(thread)
+
+    interpreter_frame_type = target.FindFirstType("_PyInterpreterFrame")
+    if interpreter_frame_type.IsValid():
+        # CPython >= 3.11
+        pyframes = []
+        for frame in frames:
+            if frame.name != "_PyEval_EvalFrameDefault":
+                continue
+
+            cframe = frame.variables["cframe"]
+            if not cframe or not cframe[0].IsValid():
+                continue
+
+            current = cframe[0].GetChildMemberWithName("current_frame")
+            while current.unsigned:
+                pyframes.append(PyInterpreterFrame.from_value(current))
+                current = current.GetChildMemberWithName("previous")
+
+            break
+
+        return pyframes
+    else:
+        # CPython < 3.11
+        return [
+            pyframe
+            for frame in frames
+            if (pyframe := PyFrameObject.from_frame(frame)) is not None
+        ]
 
 
 def print_frame_summary(result, frame):
