@@ -3,6 +3,11 @@ FROM python:${PY_VERSION}
 
 ARG LLDB_VERSION=21
 
+# Temporary workaround for https://github.com/llvm/llvm-project/issues/153385
+RUN if [ -f /usr/share/apt/default-sequoia.config ]; then \
+        sed -i 's/\(sha1\.second_preimage_resistance =\).*/\1 2027-01-01/' /usr/share/apt/default-sequoia.config; \
+    fi
+
 RUN DEBIAN_VERSION=`awk -F"[)(]+" '/VERSION=/ {print $2}' /etc/os-release` && \
     wget -q https://apt.llvm.org/llvm-snapshot.gpg.key -O /usr/share/keyrings/apt.llvm.org.asc && \
     echo "deb [signed-by=/usr/share/keyrings/apt.llvm.org.asc] http://apt.llvm.org/${DEBIAN_VERSION}/ llvm-toolchain-${DEBIAN_VERSION}-${LLDB_VERSION} main" >> /etc/apt/sources.list && \
