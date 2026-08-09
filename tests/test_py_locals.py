@@ -1,6 +1,5 @@
 from .conftest import run_lldb
 
-
 CODE = """\
 def fa():
     abs(1)
@@ -56,19 +55,17 @@ def test_globals(lldb):
     )[-1]
     actual = response.rstrip()
 
-    actual_keys = set(line.split("=")[0].strip() for line in actual.split("\n") if line)
-    expected_keys = set(
-        [
-            "__builtins__",
-            "__package__",
-            "__name__",
-            "__doc__",
-            "__file__",
-            "fa",
-            "fb",
-            "fc",
-        ]
-    )
+    actual_keys = {line.split("=")[0].strip() for line in actual.split("\n") if line}
+    expected_keys = {
+        "__builtins__",
+        "__package__",
+        "__name__",
+        "__doc__",
+        "__file__",
+        "fa",
+        "fb",
+        "fc",
+    }
     assert (expected_keys & actual_keys) == expected_keys
 
 

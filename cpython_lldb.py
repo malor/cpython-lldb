@@ -1,13 +1,11 @@
 import abc
 import argparse
 import collections
-import io
 import re
 import shlex
 import struct
 
 import lldb
-
 
 ENCODING_RE = re.compile(r"^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
 
@@ -15,7 +13,7 @@ ENCODING_RE = re.compile(r"^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
 # Objects
 
 
-class PyObject(object):
+class PyObject:
     def __init__(self, lldb_value):
         self.lldb_value = lldb_value
 
@@ -41,20 +39,22 @@ class PyObject(object):
 
     @staticmethod
     def typename_of(v):
-        try:
-            addr = (
-                v.GetChildMemberWithName("ob_type")
-                .GetChildMemberWithName("tp_name")
-                .unsigned
-            )
-            if not addr:
-                return
+        addr = (
+            v.GetChildMemberWithName("ob_type")
+            .GetChildMemberWithName("tp_name")
+            .unsigned
+        )
+        if not addr:
+            return
 
-            process = v.GetProcess()
-            return process.ReadCStringFromMemory(addr, 256, lldb.SBError())
-        except Exception:
-            # if we fail to read tp_name, then it's likely not a PyObject
-            pass
+        try:
+            status = lldb.SBError()
+            cstring = v.GetProcess().ReadCStringFromMemory(addr, 256, status)
+
+            return cstring if status.Success() else None
+        except Exception:  # noqa
+            # If we fail to read tp_name, then it's likely not a PyObject.
+            return
 
     @property
     def typename(self):
@@ -111,7 +111,7 @@ class PyLongObject(PyObject):
         digits = value.GetChildMemberWithName("ob_digit")
         abs_value = sum(
             digits.GetChildAtIndex(i, 0, True).unsigned * 2 ** (shift * i)
-            for i in range(0, abs(size))
+            for i in range(abs(size))
         )
         return abs_value if size > 0 else -abs_value
 
@@ -181,7 +181,7 @@ class PyUnicodeObject(PyObject):
         elif kind == PyUnicodeObject.U_4BYTE_KIND:
             return "utf-32"
         else:
-            raise ValueError("Unsupported PyUnicodeObject kind: {}".format(kind))
+            raise ValueError(f"Unsupported PyUnicodeObject kind: {kind}")
 
     @staticmethod
     def _read_string_from_memory(process, addr, length, kind):
@@ -252,7 +252,7 @@ class PyNoneObject(PyObject):
     value = None
 
 
-class _PySequence(object):
+class _PySequence:
     @property
     def value(self):
         value = self.lldb_value.Cast(self.lldb_type.GetPointerType())
@@ -288,7 +288,7 @@ class PyTupleObject(_PySequence, PyObject):
         return self.target.FindFirstType(self.cpython_struct)
 
 
-class _PySetObject(object):
+class _PySetObject:
     cpython_struct = "PySetObject"
 
     @property
@@ -324,10 +324,10 @@ class PyFrozenSetObject(_PySetObject, PyObject):
 
     @property
     def value(self):
-        return frozenset(super(PyFrozenSetObject, self).value)
+        return frozenset(super().value)
 
 
-class _PyDictObject(object):
+class _PyDictObject:
     DICT_KEYS_GENERAL = 0
     DICT_KEYS_UNICODE = 1
     DICT_KEYS_SPLIT = 2
@@ -457,7 +457,7 @@ class Defaultdict(PyObject):
         return PyDictObject(value.GetChildMemberWithName("dict").AddressOf()).value
 
 
-class _CollectionsUserObject(object):
+class _CollectionsUserObject:
     @property
     def value(self):
         # UserDict, UserString, and UserList all have a single instance variable
@@ -513,7 +513,7 @@ class UserString(_CollectionsUserObject, PyObject):
     typename = "UserString"
 
 
-class PyCodeAddressRange(object):
+class PyCodeAddressRange:
     """A class for parsing the line number table implemented in PEP 626.
 
     The format of the line number table is not part of CPython's API and may
@@ -662,7 +662,7 @@ class PyFrameObject(PyObject):
     typename = "frame"
 
     def __init__(self, lldb_value):
-        super(PyFrameObject, self).__init__(lldb_value)
+        super().__init__(lldb_value)
         self.co = PyCodeObject(self.child("f_code"))
 
     @classmethod
@@ -790,17 +790,13 @@ class PyFrameObject(PyObject):
             return source_file_lines(
                 self.filename, self.line_number, self.line_number + 1, encoding=encoding
             )[0]
-        except (IOError, IndexError):
+        except (OSError, IndexError):
             return "<source code is not available>"
 
     def to_pythonlike_string(self):
         lineno = self.line_number
         co_name = PyObject.from_value(self.co.child("co_name")).value
-        return 'File "{filename}", line {lineno}, in {co_name}'.format(
-            filename=self.filename,
-            co_name=co_name,
-            lineno=lineno,
-        )
+        return f'File "{self.filename}", line {lineno}, in {co_name}'
 
 
 # Commands
@@ -831,8 +827,8 @@ class Command(metaclass=abc.ABCMeta):
         try:
             args = self.argument_parser.parse_args(shlex.split(command))
             self.execute(debugger, args, result)
-        except Exception as e:
-            msg = "Failed to execute command `{}`: {}".format(self.command, e)
+        except Exception as e:  # noqa
+            msg = f"Failed to execute command `{self.command}`: {e}"
 
             result.SetError(msg)
 
@@ -933,7 +929,7 @@ class PyList(Command):
 
     @property
     def argument_parser(self):
-        parser = super(PyList, self).argument_parser
+        parser = super().argument_parser
 
         parser.add_argument("linenum", nargs="*", type=int, default=[0, 0])
 
@@ -982,12 +978,12 @@ class PyList(Command):
             for i, line in enumerate(lines, start):
                 # highlight the current line
                 if i == current_line_num:
-                    prefix = ">{}".format(i)
+                    prefix = f">{i}"
                 else:
-                    prefix = "{}".format(i)
+                    prefix = f"{i}"
 
-                write_line(result, "{:>5}    {}".format(prefix, line.rstrip()))
-        except IOError:
+                write_line(result, f"{prefix:>5}    {line.rstrip()}")
+        except OSError:
             write_line(result, "<source code is not available>")
 
 
@@ -1054,13 +1050,13 @@ class PyLocals(Command):
                 merged_locals.pop(name, None)
 
         for name in sorted(merged_locals.keys()):
-            write_line(result, "{} = {}".format(name, repr(merged_locals[name])))
+            write_line(result, f"{name} = {merged_locals[name]!r}")
 
 
 # Helpers
 
 
-class Direction(object):
+class Direction:
     DOWN = -1
     UP = 1
 
@@ -1096,7 +1092,7 @@ def move_python_frame(debugger, direction):
     if direction == Direction.UP:
         index_range = range(current_frame.idx + 1, thread.num_frames)
     else:
-        index_range = reversed(range(0, current_frame.idx))
+        index_range = reversed(range(current_frame.idx))
 
     for index in index_range:
         python_frame = PyFrameObject.from_frame(thread.GetFrameAtIndex(index))
@@ -1112,7 +1108,7 @@ def write_line(result, string):
 def source_file_encoding(filename):
     """Determine the text encoding of a Python source file."""
 
-    with io.open(filename, "rt", encoding="latin-1") as f:
+    with open(filename, "rt", encoding="latin-1") as f:
         # according to PEP-263 the magic comment must be placed on one of the first two lines
         for _ in range(2):
             line = f.readline()
@@ -1131,7 +1127,7 @@ def source_file_lines(filename, start, end, encoding="utf-8"):
     """
 
     lines = []
-    with io.open(filename, "rt", encoding=encoding) as f:
+    with open(filename, "rt", encoding=encoding) as f:
         for line_num, line in enumerate(f, 1):
             if start <= line_num < end:
                 lines.append(line)
@@ -1160,10 +1156,7 @@ def general_purpose_registers(frame):
 def register_commands(debugger):
     for cls in Command.__subclasses__():
         debugger.HandleCommand(
-            "command script add -c cpython_lldb.{cls} {command}".format(
-                cls=cls.__name__,
-                command=cls.command,
-            )
+            f"command script add -c cpython_lldb.{cls.__name__} {cls.command}"
         )
 
 
@@ -1200,7 +1193,7 @@ def register_summaries(debugger):
     }
     for type_ in cpython_structs:
         debugger.HandleCommand(
-            "type summary add -F cpython_lldb.pretty_printer {}".format(type_)
+            f"type summary add -F cpython_lldb.pretty_printer {type_}"
         )
 
     # cache the result of the lookup, so that we do not need to repeat that at runtime
