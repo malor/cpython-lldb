@@ -1,7 +1,6 @@
 import contextlib
-import io
-import re
 import os
+import re
 import subprocess
 import sys
 
@@ -51,7 +50,7 @@ def lldb_no_symbols_session(tmpdir_factory):
     with tmpdir.as_cwd():
         libpython = (
             subprocess.check_output(
-                "ldd %s | grep libpython | awk '{print $3}'" % (sys.executable),
+                f"ldd {sys.executable} | grep libpython | awk '{{print $3}}'",
                 shell=True,
             )
             .decode("utf-8")
@@ -138,13 +137,13 @@ def run_lldb(lldb_manager, code, breakpoint, commands):
     outputs = []
 
     with lldb_manager() as lldb:
-        with io.open("test.py", "wb") as fp:
+        with open("test.py", "wb") as fp:
             if isinstance(code, str):
                 code = code.encode("utf-8")
 
             fp.write(code)
 
-        lldb.sendline("breakpoint set -r %s" % breakpoint)
+        lldb.sendline(f"breakpoint set -r {breakpoint}")
         lldb.expect(r"Breakpoint \d+")
         lldb.expect(re.escape("(lldb) "))
         lldb.sendline("run test.py")
@@ -153,7 +152,7 @@ def run_lldb(lldb_manager, code, breakpoint, commands):
 
         for command in commands:
             lldb.sendline(command)
-            lldb.expect(re.escape("%s\r\n" % command))
+            lldb.expect(re.escape(f"{command}\r\n"))
             lldb.expect(re.escape("(lldb) "))
 
             outputs.append(normalize_stacktrace(lldb.before.replace("\r\n", "\n")))

@@ -1,6 +1,5 @@
 from .conftest import run_lldb
 
-
 CODE = """
 SOME_CONST = u'тест'
 

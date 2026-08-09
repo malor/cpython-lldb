@@ -47,9 +47,8 @@ def assert_lldb_repr(lldb_manager, value, expected, code_value=None):
         # for other data types we can do an exact string match using
         # a regular expression (e.g. to account for optional 'u' and 'b'
         # in unicode / bytes literals, etc)
-        assert re.match(expected, match.group(1)), "Expected: %s\nActual: %s" % (
-            expected,
-            match.group(1),
+        assert re.match(expected, match.group(1)), (
+            f"Expected: {expected}\nActual: {match.group(1)}"
         )
 
 
@@ -122,10 +121,10 @@ def test_tuple(lldb):
 
 def test_set(lldb):
     assert_lldb_repr(lldb, set(), r"set\(\[\]\)")
-    assert_lldb_repr(lldb, set([1, 2, 3]), r"set\(\[1, 2, 3\]\)")
+    assert_lldb_repr(lldb, {1, 2, 3}, r"set\(\[1, 2, 3\]\)")
     assert_lldb_repr(
         lldb,
-        set([1, 3.14159, "hello", False, None]),
+        {1, 3.14159, "hello", False, None},
         r"set\(\[False, 1, 3.14159, None, u\'hello\'\]\)",
     )
     assert_lldb_repr(

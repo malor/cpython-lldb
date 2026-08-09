@@ -85,7 +85,7 @@ Traceback (most recent call last):
         lldb,
         code=code,
         breakpoint="builtin_abs",
-        commands=["frame select %d" % int(pyframes[2][0]), "py-bt"],
+        commands=[f"frame select {int(pyframes[2][0])}", "py-bt"],
     )[-1]
     actual = response.rstrip()
     assert actual == backtrace
@@ -126,7 +126,7 @@ fc()
         lldb,
         code=code,
         breakpoint="builtin_abs",
-        commands=["frame select %d" % (int(pyframes[-1][0]) + 1), "py-bt"],
+        commands=[f"frame select {int(pyframes[-1][0]) + 1}", "py-bt"],
     )[-1]
     actual = response.rstrip()
     assert actual == backtrace
